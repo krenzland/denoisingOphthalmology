@@ -1,0 +1,45 @@
+\documentclass{scrartcl}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+
+\usepackage[american]{babel}
+\usepackage[autostyle, english = american]{csquotes}
+ \usepackage[%
+   backend=biber]{biblatex}
+ \addbibresource{../bibliography.bib}
+\usepackage[final]{microtype}
+\usepackage{todonotes}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{bm}
+\usepackage{amsmath}
+\usepackage{mathtools} % for \mathclap
+\usepackage{hyperref}
+\usepackage[noabbrev]{cleveref}
+\newcommand{\creflastconjunction}{, and\nobreakspace} % use Oxford comma
+%\usepackage{placeins} % for floatbarrier
+
+\usepackage{tikz}
+\usetikzlibrary{arrows, positioning, shapes.geometric}
+\usetikzlibrary{calc}
+
+\begin{document}
+\title{Deep-Learning-based Image Denoising in Ophthalmology}
+\author{Lukas Krenz}
+
+\maketitle
+
+\section{Modeling Considerations}
+
+\subsection{Architectures}
+\label{sec:architecturs}
+
+\subsection{Loss functions}
+\label{sec:loss}
+
+\subsection{Evaluation}
+\label{sec:evaluation}
+
+
+\printbibliography
+\end{document}
