@@ -10,6 +10,7 @@
 \usepackage[final]{microtype}
 \usepackage{todonotes}
 \usepackage{caption}
+\usepackage{booktabs}
 \usepackage{subcaption}
 \usepackage{bm}
 \usepackage{amsmath}
@@ -37,29 +38,104 @@ Differentiate between methods optimised for quality and speed.
 Quality mostly feeds in a upsampled image, filters for in HR-space.
 Efficiency uses low-resolution image as input, upscales at end.
 
-Otherwise:
-Residual blocks, pyramid structure~\cite{LapSRN}, residual learning.
+We are mostly interested in networks that use a structure that is optimized for efficiency.
+All these structures (or at least the cited examples) have one thing in common:
+They use the low-resolution image as input.
+\begin{description}
+\item[Laplacian Pyramid] Structure used by~\cite{LapSRN}.
+  Progressive upsampling, predict subband residual for each upsampling step.
+  Feature extraction at \textit{coarse}, not \textit{fine} level.
+  Same network can do upsampling at different scales.
+  Uses deep supervision, each resulting image contributes to the loss.
+\item[Hourglass] Used for example by~\cite{Fsrcnn}.
+  Structure of form (Feature extraction -> Shrinking -> Mapping -> Expanding -> Deconvolution).
+  The filters (except deconvolution) are similar for different upscaling factors, makes retraining easy.
+\item[Subpixel Convolution]  Used by~\cite{Espcn}.
+  $L$ convolution layers for feature maps, one subpixel convolution layer with $L$ filters.
+  In~\cite{Espcn} $L = 3$.
+\end{description}
+
+The following architectures/papers are optimised for quality without regarding the run-time:
+\begin{description}
+\item[Residual Blocks] Used for example by~\cite{EnhanceNet, SRGAN, EDSR}.
+   In case of \textbf{EnhanceNet}: structure of form (Conv -> Residual* -> (NNUpsampling -> Conv)* -> Conv) with 10 residual blocks.
+  
+\item[Deeply Recursive] Used by~\cite{DRCN}.
+  Extremely expensive to train (6 days on Titan X).
+  Training relies on several tricks.
+  Structure of (embedding network -> recursive inference network -> reconstruction network)
+\end{description}
+
+More architectures are discussed in the paper~\cite{NTIRE2017} which describes a contest that was won by~\cite{EDSR}.
+Most approaches used in this challenge are not real-time capable.
 
 \subsection{Loss functions}
 \label{sec:loss}
 
 \begin{description}
 \item[MSE] Standard pixelwise mse, optimizes PSNR, leads to blurry images
-\item[Charbonnier-Loss] Pixelwise (smoothed) $L_1$ error, leads to better edges, e.g.~\cite{LapSRN}
-\item[Saliency Loss] Weigh pixels by their importance, hand tuned weigts.
-  E.g. vessel curvature
-\item[Perceptive Loss] Don't compare pixel-wise but consider learned filters from a different network.
-  Mostly VGG-19. Leads to visually better images but decreased PSNR
-\item[Adversarial Loss] Optimize linear combination of other loss and loss function learned by d/critic network.
+\item[Charbonnier-Loss] Pixelwise (differentiable approximation of) $L_1$ error, is more robust, used by~\cite{LapSRN}.
+  Defined typically as
+  \begin{align}
+    \label{eq:charbonnier}
+    L( \hat{\bm{y}}, \bm{y}; \bm{\theta}) = \sum_n p \left( \bm{\hat{y}} - \bm{y} \right)
+    \intertext{with }
+    p(\bm{x}) = \sqrt{ \langle x, x \rangle  + \epsilon^2},
+  \end{align}
+  where $\varepsilon$ is a parameter.
+\item[Perceptual Loss] Don't compare pixel-wise but consider difference of filtered images.
+  Can be defined for an arbitrary filter map as
+  \begin{equation}
+    \label{eq:perceptual-loss}
+   L_p = \Vert \phi( \bm{\hat{y}} ) - \phi (\bm{y}) \Vert_2^2 .
+  \end{equation}
+  The filter maps $\phi$ are often taken from the pooling layers of the VGG-19 network, e.g. EnhanceNet uses the second and fifth~\cite{EnhanceNet}.
+  Leads to visually better images but decreased PSNR.
+  See~\cite{PerceptualLoss} for motivation/details.
+\item[Saliency Loss] The same as the perceptual loss but with handcrafted filters.
+  One example for this is~\cite{SaliencyGAN} which uses the curvature of the image, distribution of elements in a neighborhood and uniqueness of feature maps.
+  This loss is handcrafted for vessel-detection.
+\item[Texture Loss] Use patch-wise correlations of perceptive loss, similar to style transfer. See~\cite{EnhanceNet}.
+\item[Adversarial Loss] Optimize linear combination of other loss and loss function learned by discriminator/critic network.
   Leads to visually pleasing images, reduced PSNR and might lead to ``imagined'' artifacts.
-  Maybe dubious in a medical setting.
+  First seen in~\cite{SRGAN}.
+  Mostly classical GAN architectures are used, might make sense to explore more recent variants for easier training (e.g.\ WGAN-GP).
+  
 \end{description}
-\subsection{Evaluation}
-Either use metrics such as PSNR/SSIM, visually, or use efficiency as pre-processing, e.g. improved segmentation results
-\label{sec:evaluation}
+\subsection{Evaluation}\label{sec:evaluation}
+\begin{description}
+\item[PSNR] Peak-Signal-To-Noise-Ratio. Scaled version of \textsc{mse}, higher values correspond to lower error, defined by:
+  \begin{equation}
+  \label{eq:psnr}
+  \mathrm{PSNR} = -10 \log_{10} (\mathrm{MSE}).
+\end{equation}
+\item[SSIM] Structural similarity index. Tries to measure perceived quality of images.
+\end{description}
+
+Either use metrics such as PSNR/SSIM, compare visually, or use efficiency as pre-processing, e.g. improved segmentation results
 
 \subsection{Relevant results}
 Difficult to compare, visual quality does not correspond directly to improved error!
+For \textsc{psnr}-results see~\cref{tab:results}.
+
+\begin{table}[]
+\centering
+\caption{Some Results, all measured in \textsc{psnr}}
+
+\label{tab:results}
+\begin{tabular}{@{}llll@{}}
+\toprule
+Model          & SET5  & SET14 & BSDS100 \\ \midrule
+EDSR+~\cite{EDSR} & 32.62 & 28.94 & 27.97 \\
+EnhanceNet-E~\cite{EnhanceNet}   & 31.74 & 28.42 & 27.50   \\
+LAPSRN~\cite{LapSRN}         & 31.53 & 28.19 & 27.32   \\
+DRCN~\cite{DRCN}           & 31.53 & 28.04 & 27.23   \\
+ESPCN~\cite{Espcn}       & 30.9  & 27.73 &         \\
+FSRCNN~\cite{Fsrcnn}         & 30.71 & 27.7  & 26.97   \\
+EnhanceNet-PAT~\cite{EnhanceNet} & 28.56 & 25.77 & 24.93   \\
+Bicubic        & 28.42 & 26.1  & 25.96   \\ \bottomrule
+\end{tabular}
+\end{table}
 
 \printbibliography
 \end{document}
