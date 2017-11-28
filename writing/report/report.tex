@@ -33,13 +33,33 @@
 
 \subsection{Architectures}
 \label{sec:architecturs}
+Differentiate between methods optimised for quality and speed.
+Quality mostly feeds in a upsampled image, filters for in HR-space.
+Efficiency uses low-resolution image as input, upscales at end.
+
+Otherwise:
+Residual blocks, pyramid structure~\cite{LapSRN}, residual learning.
 
 \subsection{Loss functions}
 \label{sec:loss}
 
+\begin{description}
+\item[MSE] Standard pixelwise mse, optimizes PSNR, leads to blurry images
+\item[Charbonnier-Loss] Pixelwise (smoothed) $L_1$ error, leads to better edges, e.g.~\cite{LapSRN}
+\item[Saliency Loss] Weigh pixels by their importance, hand tuned weigts.
+  E.g. vessel curvature
+\item[Perceptive Loss] Don't compare pixel-wise but consider learned filters from a different network.
+  Mostly VGG-19. Leads to visually better images but decreased PSNR
+\item[Adversarial Loss] Optimize linear combination of other loss and loss function learned by d/critic network.
+  Leads to visually pleasing images, reduced PSNR and might lead to ``imagined'' artifacts.
+  Maybe dubious in a medical setting.
+\end{description}
 \subsection{Evaluation}
+Either use metrics such as PSNR/SSIM, visually, or use efficiency as pre-processing, e.g. improved segmentation results
 \label{sec:evaluation}
 
+\subsection{Relevant results}
+Difficult to compare, visual quality does not correspond directly to improved error!
 
 \printbibliography
 \end{document}
