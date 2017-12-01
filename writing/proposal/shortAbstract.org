@@ -3,13 +3,12 @@
 #+OPTIONS: date:nil toc:nil
 #+LATEX_HEADER: %\renewcommand\maketitle{}
 
-This project is focussed mostly on the example of retinal membrane peeling, which is an ophthalmic operation.
+This project is focused mostly on the example of retinal membrane peeling, which is an ophthalmic operation.
 While high quality images are available in the diagnostic phase, this is not true during operations.
-Intraoperative images suffer image degrations such as out-of-focus blur and motion-blur.
-
+Intraoperative images suffer image degredations such as out-of-focus blur and motion-blur.
 They also contain surgical instruments and the eye-membrane is stained with a coloring agent.
-Image processing algorithms can be used to increase the quality of the images via upscaling and denoising.
-An image restoration algorith that is useful in an intraoperative setting has to be improve images of varying quality in real time while preserving the structure of the image.
+
+An image restoration algorithm that is useful in an intraoperative setting has to be improve images of varying quality in real time while preserving the structure of the image.
 A denoising tool could also be used as a pre-processing step for further image processing procedures such as vessel segmentation.
 
 The performance of classical image denoising algorithms is not promising for this scenario, because the nature of the image corruption is both complicated and highly irregular.
