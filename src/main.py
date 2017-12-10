@@ -90,7 +90,6 @@ def main():
     model = LapSRN(depth=5).cuda()
     # Paper uses SGD with LR=1e-4, doesnt work here for some reason.
     optimizer = optim.Adam(model.parameters(), weight_decay=1e-4)
-    scheduler = lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5) # See paper
     criterion = CharbonnierLoss().cuda()
 
     if args.checkpoint:
@@ -100,7 +99,9 @@ def main():
         start_epoch = checkpoint['epoch']
         print("Model succesfully loaded from checkpoint")
     else:
-        start_epoch = 1
+        start_epoch = 0
+
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5, last_epoch = start_epoch) # See paper
 
     # Load datasets and set transforms.
     # TODO: Make dataset paths configurable!
