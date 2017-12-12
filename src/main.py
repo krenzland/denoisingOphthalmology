@@ -89,6 +89,8 @@ def main():
         seed = int(args.seed)
     else:
         seed = np.random.randint(0, 10000)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
     print(f"Using seed={seed}.")
     
     model = LapSRN(depth=args.depth).cuda()
