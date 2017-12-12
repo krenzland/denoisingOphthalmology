@@ -68,6 +68,10 @@ def main():
     parser.add_argument('--checkpoint', help="Path to checkpoint file.")
     parser.add_argument('--seed', type=int,
                         help="Value for random seed. Default: Random.")
+    # ---------------------- Model settings ---------------------------------------
+    parser.add_argument('--depth', type=int, default=5,
+                        help="Set number of convolution layers for each feature extraction stage.")
+    # ------------------ Optimizer settings ---------------------------------------
     parser.add_argument('--lr', type=float, default=1e-4,
                         help="Value for learning rate. Default: 1e-4")
     parser.add_argument('--batch_size', type=int, default=32,
@@ -87,7 +91,7 @@ def main():
         seed = np.random.randint(0, 10000)
     print(f"Using seed={seed}.")
     
-    model = LapSRN(depth=5).cuda()
+    model = LapSRN(depth=args.depth).cuda()
     # Paper uses SGD with LR=1e-4, doesnt work here for some reason.
     optimizer = optim.Adam(model.parameters(), weight_decay=1e-4)
     criterion = CharbonnierLoss().cuda()
