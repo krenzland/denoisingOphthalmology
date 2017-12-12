@@ -4,14 +4,38 @@ import os
 import numpy as np
 from PIL import Image
 import torch.utils.data as data
-from torchvision.transforms import Compose, RandomCrop, ToTensor, Scale, RandomHorizontalFlip
+from torchvision.transforms import Compose, RandomCrop, ToTensor, Resize, RandomHorizontalFlip, RandomVerticalFlip, Lambda
+import torchvision.transforms.functional as F
+
+class RandomScaling(object):
+    """Resize the input PIL Image by a factor of (0.5, 1.0)
+    """
+
+    def __init__(self,interpolation=Image.BILINEAR):
+        self.interpolation = interpolation
+
+    @staticmethod
+    def get_params():
+        return np.random.uniform(0.5, 1.0)
+        
+    def __call__(self, img):
+        """
+        Args:
+            img (PIL Image): Image to be scaled by random factor \in (0.5, 1.0).
+
+        Returns:
+            PIL Image: Rescaled image.
+        """
+        s = self.get_params()
+        oW, oH = img.size
+        nW = int(s * oW)
+        nH = int(s * oH)
+        new_size = nW, nH
+        return F.resize(img, new_size, self.interpolation)
 
 class RandomRotation(object):
-    def __init__(self, angles=None):
-        if angles:
-            self.angles = angles
-        else:
-            self.angles = np.array([90, 180, 270])
+    def __init__(self, angles=np.array([0, 90, 180, 270])):
+        self.angles = angles
 
     @staticmethod
     def get_params(angles):
@@ -70,16 +94,13 @@ class Dataset(data.Dataset):
     
 def get_hr_transform(crop_size):
     return Compose([
-        RandomCrop(crop_size),
-        # RandomScale between 0.5 and 1.0
+        RandomScaling(),
         RandomRotation(),
-        RandomHorizontalFlip()
-        # RandomVerticalFlip
+        RandomHorizontalFlip(),
+        RandomVerticalFlip(),
+        RandomCrop(crop_size)
     ])
 
 def get_lr_transform(crop_size, factor):
     # Factor = 2 for hr4, Factor = 4 for hr2
-    return Scale(crop_size//factor)
-
-# ALL IMAGES ARE TRANSFORMED BY: 1) Rand. scaling between 0.5 and 1.0
-# 2) Rotation by 90, 180, 270° 3) Flip img. hor./vert with prob of 0.5
+    return Resize(crop_size//factor)
