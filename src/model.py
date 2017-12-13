@@ -60,7 +60,7 @@ class FeatureExtraction(nn.Module):
         
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                init.kaiming_uniform(m.weight, a=0.2)
+                init.kaiming_normal(m.weight, a=0.2)
             if isinstance(m, nn.ConvTranspose2d):
                 m.weight.data.copy_(bilinear_upsample_matrix(4, m.weight.data))
         
