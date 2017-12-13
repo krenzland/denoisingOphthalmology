@@ -34,6 +34,7 @@ def train(epoch, model, criterion, optimizer, train_data):
         
         optimizer.zero_grad()
         loss.backward()
+        nn.utils.clip_grad_norm(model.parameters(), 10) # Fixes NaN in SGD for first iteration with high LR.
         optimizer.step()
         
         if it > 0 and it % 10 == 0:
