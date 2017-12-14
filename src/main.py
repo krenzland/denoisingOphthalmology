@@ -7,6 +7,7 @@ import torch.utils.data as data
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 from torch.autograd import Variable
+from tensorboardX import SummaryWriter
 
 from model import LapSRN
 from loss import CharbonnierLoss
@@ -20,7 +21,7 @@ def save_checkpoint(epoch, model, optimizer, filename):
     }
     torch.save(state, filename)
 
-def train(epoch, model, criterion, optimizer, train_data):
+def train(epoch, model, criterion, optimizer, writer, train_data):
     cum_loss = 0.0
     for it, batch in enumerate(train_data):
         lr, hr2, hr4, hr8 = [Variable(b).cuda(async=True) for b in batch]        
@@ -37,10 +38,12 @@ def train(epoch, model, criterion, optimizer, train_data):
         nn.utils.clip_grad_norm(model.parameters(), 10) # Fixes NaN in SGD for first iteration with high LR.
         optimizer.step()
         
-        if it > 0 and it % 10 == 0:
+        if it > 0 and it % (len(train_data)//10) == 0:
             print(f"Epoch={epoch}, Batch={it}/{len(train_data)}, Avg. loss = {cum_loss/it}")
+
+    writer.add_scalar('data/training_error', cum_loss, epoch)
  
-def validate(model, validation_data):
+def validate(epoch, model, writer, validation_data):
     cum_psnr2, cum_psnr4, cum_psnr8 = 0.0, 0.0, 0.0
     
     for batch in validation_data:
@@ -58,6 +61,9 @@ def validate(model, validation_data):
         cum_psnr8 += get_psnr(error_3)
         
     print(f"Avg. PSNR: {cum_psnr2/len(validation_data)}, {cum_psnr4/len(validation_data)},{cum_psnr8/len(validation_data)}.")
+    writer.add_scalar('data/validation_2', cum_psnr2/len(validation_data), epoch)
+    writer.add_scalar('data/validation_4', cum_psnr4/len(validation_data), epoch)
+    writer.add_scalar('data/validation_8', cum_psnr8/len(validation_data), epoch)
 
 
 
@@ -97,6 +103,7 @@ def main():
     model = LapSRN(depth=args.depth).cuda()
     # Paper uses SGD with LR=1e-4, doesnt work here for some reason.
     optimizer = optim.Adam(model.parameters(), weight_decay=1e-4)
+    #optimizer = optim.SGD(model.parameters(), weight_decay=10e-4, lr=10e-4)
     criterion = CharbonnierLoss().cuda()
 
     if args.checkpoint:
@@ -106,33 +113,37 @@ def main():
         start_epoch = checkpoint['epoch']
         print("Model succesfully loaded from checkpoint")
     else:
-        start_epoch = 0
+        start_epoch = -1
 
     scheduler = lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5, last_epoch = start_epoch) # See paper
 
     # Load datasets and set transforms.
     # TODO: Make dataset paths configurable!
     train_data_path = '../data/raw/all-images/'
-    validation_data_path = '../data/raw/DRIVE/training/images'
-
+#    validation_data_path = '../data/raw/DRIVE/training/images'
+    validation_data_path = '../data/raw/all-images/'
+    
     # Set needed data transformations.
     CROP_SIZE = 128 # maybe 256?
     hr_transform = get_hr_transform(CROP_SIZE)
     lr_transforms = [get_lr_transform(CROP_SIZE, factor) for factor in [8, 4, 2]]
 
-    train_dataset = Dataset(train_data_path, hr_transform=hr_transform, lr_transforms=lr_transforms)
+    train_dataset = Dataset(train_data_path, hr_transform=hr_transform, lr_transforms=lr_transforms, split='train')
     train_data = data.DataLoader(dataset=train_dataset, num_workers=4,\
                                  batch_size=args.batch_size, shuffle=True, pin_memory=True)
     validation_dataset = Dataset(validation_data_path, hr_transform=hr_transform,\
-                                 lr_transforms=lr_transforms)
+                                 lr_transforms=lr_transforms, split='validation')
     validation_data = data.DataLoader(dataset=validation_dataset, num_workers=4,\
                                       batch_size=args.batch_size, shuffle=True, pin_memory=True)
 
+    # Initialise logging
+    writer = SummaryWriter()
+    
     for epoch in range(start_epoch, args.num_epochs+1):
         print(f"Started epoch num={epoch}.")   
         scheduler.step()
-        train(epoch, model, criterion, optimizer, train_data)
-        validate(model, validation_data)
+        train(epoch, model, criterion, optimizer, writer, train_data)
+        validate(epoch, model, writer, validation_data)
     
         if (epoch % args.checkpoint_every) == 0:
             checkpoint_name = f'../checkpoints/srn_{epoch}.pt'
