@@ -30,6 +30,9 @@ class RandomScaling(object):
         oW, oH = img.size
         nW = int(s * oW)
         nH = int(s * oH)
+        # Make sure we are not smaller than the cropsize!
+        nW = max(self.crop_size, int(s * oW))
+        nH = max(self.crop_size, int(s * oH))
         new_size = nW, nH
         return F.resize(img, new_size, self.interpolation)
 
