@@ -76,8 +76,8 @@
   \frametitle{Example Use-Case: Digital Window}
    \begin{figure}[h]
     \centering
-    \missingfigure[figwidth=\textwidth]{Movie - Digital Window}
-    \caption{Digital Window}
+    \movie[width=0.9735\textwidth, height=0.55\textwidth, autostart,, loop, poster]{}{digitalwindow.mp4}
+    \caption*{Digital Window}
     \label{fig:digital-window}
   \end{figure}
 \end{frame}
@@ -113,7 +113,7 @@
 \begin{block}{General Super-Resolution}
 Many different super resolution approaches.
     
-E.g. based on image statistics, self-simiarity of images, learned patch-databases or \textbf{convolutional neural networks}.
+E.g.\ based on image statistics, self-simiarity of images, learned patch-databases or \textbf{convolutional neural networks}.
 
 Only CNNs fulfil \textbf{both} quality and speed constraints
 \end{block}
@@ -129,19 +129,32 @@ Solid results, not optimized for intraoperative use-case
 \begin{frame}{Some common CNN-Topologies}
   \begin{figure}[h]
     \centering
-    \includegraphics[width=\textwidth]{sr_architectures.png}
-    \caption{Common Topologies\footcite{LapSRN}}
-    \label{fig:lap-srn}
+    \includegraphics[width=0.8\textwidth]{sr_architectures.png}
+    \caption*{Common Topologies\footcite{LapSRN}}
+    \label{fig:topologies-cnn}
   \end{figure}
 \end{frame}
 
-\begin{frame}{Laplacian Network}
+\begin{frame}{Laplacian Network\footcite{LapSRN}}
+\begin{columns}
+\begin{column}{0.66\textwidth}
   \begin{figure}[h]
     \centering
-    \includegraphics[width=0.7\textwidth]{lap_srn.png}
-    \caption{Laplacian pyramid network\footcite{LapSRN}}
+    \includegraphics[width=1.0\textwidth]{lap_srn.png}
+    \caption*{Laplacian pyramid network}
     \label{fig:lap-srn}
   \end{figure}
+\end{column}
+
+\begin{column}{0.34\textwidth}
+  \begin{enumerate}
+  \item Progressive Reconstruction
+  \item Residual Learning
+  \item Low-resolution filters
+  \item Non-SR-case: Add residual to HR-images
+  \end{enumerate}
+\end{column}
+\end{columns}
 \end{frame}
 
 \begin{frame}{Robust Loss}
@@ -213,29 +226,70 @@ Transform images before calculating loss, with feature map $\phi$:
 \end{frame}
 
 \begin{frame}
-  \frametitle{Perceptual Loss - Saliency Maps}
+  \frametitle{Perceptual Loss---Saliency Maps}
    Possibility 2: Saliency Maps\footcite{SaliencyGAN}
 
   \textbf{Handcrafted} features
+\begin{columns}
+  \begin{column}{0.5\linewidth}
+    \begin{figure}[h]
+      \centering
+        \includegraphics[width=0.9\textwidth]{saliency_gt}
+      \caption*{Retina image}
+    \end{figure}
+  \end{column}
+  \begin{column}{0.5\linewidth}
+    \begin{figure}[h]
+      \centering
+        \includegraphics[width=0.9\textwidth]{saliency_smap}
+      \caption*{Resulting saliency map}
+    \end{figure}
+  \end{column} 
+\end{columns}
 \end{frame}
 
 \begin{frame}{Adversarial Loss}
-Two player game between generator (our network) and discriminator (which image is real?)\footfullcite{SRGAN}
+  Two player game between
+  \begin{description}
+  \item[Generator] Super-resolution network
+  \item[Discriminator] Tries to decide, whether images are \textbf{real} high-resolution images or \textbf{generated} by our network
+  \end{description}
+
+  Leads to realistic looking images
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.58\textwidth]{adversarial_loss}
+    \caption*{Toy example for adversarial loss\footcite{EnhanceNet}}
+  \end{figure}
 \end{frame}
 
 \begin{frame}{Possible Modifications for Network}
-  Weight sharing (fewer parameters, robust filters, multi-scale training)
+  Weight sharing %(fewer parameters, robust filters, multi-scale training)
 
-  Replace stacked convolutional layers with other layers (e.g.\ residual, recursive)
+  Replace stacked convolutions
 
-  Replace transposed convolutional layers with others (avoid checkerboard artifacts)\footfullcite{deconvolution}
+  Replace transposed convolutions (avoid checkerboard artifacts)\footfullcite{deconvolution}
 
   \begin{figure}[h]
     \centering
-    %\includegraphics[]{}
-    \caption{Example of block artifacts}
-    \label{fig:lap-srn}
+    \includegraphics[width=0.45\textwidth]{perceptual_loss_vgg}
+    \caption*{Example of block artifacts (from \footcite{PerceptualLoss})}
   \end{figure}
+\end{frame}
+
+\begin{frame}
+   \frametitle{Dataset}
+   Use 1000 images from Eyepacs dataset\footnote{\url{https://www.kaggle.com/c/diabetic-retinopathy-detection}} (ca.\ 300k HR) for training
+
+   Crop black borders, rescale to $1024 \times 1024$
+
+   Augment, then select random crops of size $128 \times 128$, create low-resolution images by downscaling and blurring
+
+   \begin{figure}[h]
+     \centering
+     \includegraphics[width=0.43\textwidth]{eyepacs_example}
+     \caption*{Eyepacs example}
+   \end{figure}
 \end{frame}
 
 \begin{frame}{Evaluation}
@@ -243,9 +297,15 @@ Two player game between generator (our network) and discriminator (which image i
 
   \textbf{Useless} in our case.
 
-  Perceptual \textit{\&} adversarial loss improve perceived quality but increase MSE!
+  Perceptual \textit{\&} adversarial loss improve perceived quality but increase error!
 
   Rather compare effectiveness as a pre-processing tool.
+
+  \begin{figure}[h]
+    \centering
+    \includegraphics[width=0.58\textwidth]{adversarial_loss}
+    \caption*{Adversarial loss higher quality with larger error\footcite{EnhanceNet}}
+  \end{figure}
 \end{frame}
 
 \begin{frame} \frametitle{Timeline}
