@@ -1,8 +1,9 @@
 \documentclass{beamer}
 \usetheme{metropolis} % Use metropolis theme
+\usepackage{lmodern}
 
 \renewcommand{\footnoterule}{%
-  \hspace{10cm}
+  \hspace{2cm}
   \kern -3pt
   \hrule width \textwidth height 1pt
   \kern 2pt
@@ -18,8 +19,8 @@
   url=false,
   isbn=false,
   eprint=false,
-  style=authoryear,
-  citestyle=verbose-note,
+  style=verbose,
+  citestyle=verbose,
   hyperref=true,
   maxnames=99,
   minnames=1,
@@ -28,6 +29,7 @@
   uniquename=init]{biblatex}
 %\DeclareFieldFormat[inproceedings, article]{pages}{}%
 %\DeclareFieldFormat[inproceedings]{organization}{}%
+  % ignore some field for citations
 \DeclareSourcemap{
   \maps[datatype=bibtex, overwrite]{
     \map{
@@ -41,6 +43,9 @@
 
 \addbibresource{../bibliography.bib}
 
+\let\oldfootnotesize\footnotesize
+\renewcommand*{\footnotesize}{\oldfootnotesize\fontsize{6}{6}}
+
 \usepackage{caption}
 \usepackage{xpatch}
 \usepackage{bm}
@@ -52,7 +57,6 @@
 \usepackage[noabbrev]{cleveref}
 \newcommand{\creflastconjunction}{, and\nobreakspace} % use Oxford comma
 \usepackage{todonotes}
-\usepackage{phaistos}
 \usepackage{multimedia}
 \usepackage{tikz}
 \usetikzlibrary{arrows, positioning, shapes.geometric}
@@ -64,8 +68,8 @@
 
 \newcommand{\cn}{\footnote{\enquote{TODO: Citation.}, 2017, \textbf{Conference}, \textit{Author 1, Author 2, Author 3, Author 4} }}
 
-\title{Deep-Learning-based Image Denoising in Ophthalmology\\GR kick-off}
-\author{Lukas Krenz\\Advisor: Nicola Rieke\\Director: Prof.\ Dr.\ Nassir Navab}
+\title{Deep-Learning-based Image Denoising in Ophthalmology\\Guided Research Kick-Off}
+\author{Lukas Krenz\\Adviser: Nicola Rieke\\Director: Prof.\ Dr.\ Nassir Navab}
 \date{January 19, 2018} 
 \institute{TUM, Chair for Computer Aided Medical Procedures \textit{\&} Augmented Reality}
 
@@ -100,9 +104,9 @@
 
 \begin{block}{Constraints}
   \begin{itemize}
-  \item Real-time
+  \item Real-time, as fast as possible
   \item Different levels of zoom
-  \item Preserve anatomical structure (vessels, etc.\ )
+  \item Preserve anatomical structure (vessels, etc.)
   \end{itemize}
 \end{block}
 \end{frame}
@@ -111,31 +115,48 @@
   \frametitle{State of the Art}
 
 \begin{block}{General Super-Resolution}
-Many different super resolution approaches.
+Many different super resolution approaches\footcite{SRsurvey}.
     
 E.g.\ based on image statistics, self-similarity of images, learned patch-databases or \textbf{convolutional neural networks}.
 
-Only CNNs fulfil \textbf{both} quality and speed constraints
+CNNs fulfil \textbf{both} quality and speed constraints
 \end{block}
 
 
-\begin{block}{Opthamology}
+\begin{block}{Ophthalmology}
 Uses CNN-Upscaling\footcite{SaliencyGAN} 
 
-Solid results, not optimized for intraoperative use-case
+Solid results, not optimised for intraoperative use-case
 \end{block}
 \end{frame}
 
 \begin{frame}{Some common CNN-Topologies\footcite{LapSRN}}
 \begin{columns}
+\begin{column}{0.33\textwidth}
+  \begin{figure}[h]
+    \centering
+    \includegraphics[height=0.4\textwidth]{sr_architectures_srcnn}
+    \caption*{SRCNN\footnotemark}
+  \end{figure}
+\end{column} \footcitetext{Srcnn}\begin{column}{0.33\textwidth}
+  \begin{figure}[h]
+    \centering
+    \includegraphics[height=0.4\textwidth]{sr_architectures_fsrcnn}
+    \caption*{FSRCNN\footnotemark}
+  \end{figure}
+\end{column}
+\footcitetext{Fsrcnn}
+\end{columns}
+
+\begin{columns}
 \begin{column}{0.66\textwidth}
   \begin{figure}[h]
     \centering
-    \includegraphics[width=1.0\textwidth]{sr_architectures}
-    \caption*{Common Topologies}
-    \label{fig:lap-srn}
+    \includegraphics[width=0.6\textwidth]{sr_architectures_vdsr}
+    \caption*{VDSR\footnotemark}
   \end{figure}
 \end{column}
+\footcitetext{Vdsr}
 \begin{column}{0.34\textwidth}
   \textit{Red}: Convolution\\
   \textit{Blue}: Transposed Convolution\\
@@ -144,7 +165,7 @@ Solid results, not optimized for intraoperative use-case
 \end{columns}
 \end{frame}
 
-\begin{frame}{Laplacian Network\footcite{LapSRN}}
+\begin{frame}{Laplacian Network\footfullcite{LapSRN}}
 \begin{columns}
 \begin{column}{0.66\textwidth}
   \begin{figure}[h]
@@ -157,8 +178,8 @@ Solid results, not optimized for intraoperative use-case
 
 \begin{column}{0.34\textwidth}
   \begin{enumerate}
-  \item Progressive Reconstruction
   \item Residual Learning
+  \item Progressive Reconstruction
   \item Low-resolution filters
   \item Non-SR-case: Add residual to HR-images
   \end{enumerate}
@@ -167,7 +188,7 @@ Solid results, not optimized for intraoperative use-case
 \textit{Red}: $3 \times 3$ convolution, \textit{blue}: transposed convolution, \textit{green} summation
 \end{frame}
 
-\begin{frame}{Robust (Charbonnier) Loss\footcite{LapSRN}}
+\begin{frame}{Robust (Charbonnier) Loss\footfullcite{LapSRN}}
 (Relaxed) $L_1$  loss instead of $L_2$ loss
 \begin{align*}
     \label{eq:charbonnier}
@@ -205,7 +226,7 @@ Robust, avoids \textbf{blurry} images
 \begin{frame}{Perceptual Loss---VGG-based\footcite{PerceptualLoss}}
 Transform images before calculating loss, with feature map $\phi$:
 \begin{equation*}
-    L_p( \hat{\bm{y}}, \bm{y}; \bm{\theta}) = \Vert \phi( \bm{\hat{y}} ) - \phi( \bm{y}) \Vert
+    L_p( \hat{\bm{y}}, \bm{y}; \bm{\theta}) = \sum_n \Vert \phi( \bm{\hat{y}} ) - \phi( \bm{y}) \Vert
 \end{equation*}
 
   \alert{Possibility 1}: Neural Network based loss, \textbf{automatic} features
@@ -236,7 +257,7 @@ Transform images before calculating loss, with feature map $\phi$:
 \end{frame}
 
 \begin{frame}
-  \frametitle{Perceptual Loss---Saliency Maps\footcite{SaliencyGAN}}
+  \frametitle{Perceptual Loss---Saliency Maps\footfullcite{SaliencyGAN}}
    \alert{Possibility 2}: Saliency Maps
 
   \textbf{Handcrafted} features
@@ -274,7 +295,7 @@ Transform images before calculating loss, with feature map $\phi$:
 \end{frame}
 
 \begin{frame}{Possible Modifications for Network}
-  Weight sharing %(fewer parameters, robust filters, multi-scale training)
+  Weight sharing
 
   Replace stacked convolutions
 
@@ -283,15 +304,13 @@ Transform images before calculating loss, with feature map $\phi$:
   \begin{figure}[h]
     \centering
     \includegraphics[width=0.45\textwidth]{perceptual_loss_vgg}
-    \caption*{Example of block artifacts (from \footcite{PerceptualLoss})}
+    \caption*{Example of block artifacts (from \footfullcite{PerceptualLoss})}
   \end{figure}
 \end{frame}
 
 \begin{frame}
    \frametitle{Dataset}
-   Use 1000 images from Eyepacs dataset\footnote{\url{https://www.kaggle.com/c/diabetic-retinopathy-detection}} (ca.\ 300k HR) for training
-
-   Crop black borders, rescale to $1024 \times 1024$
+   Use 1000 images from Eyepacs dataset\footnote{\url{https://www.kaggle.com/c/diabetic-retinopathy-detection}} (ca.\ 30k HR) for training
 
    Augment, then select random crops of size $128 \times 128$, create low-resolution images by downscaling and blurring
 
@@ -305,17 +324,34 @@ Transform images before calculating loss, with feature map $\phi$:
 \begin{frame}{Evaluation}
   Normally: Compare pixel-wise reconstruction error
 
-  \textbf{Useless} in our case.
+  \textbf{Difficult} in our case.
 
   Perceptual \textit{\&} adversarial loss improve perceived quality but increase error!
 
   Rather compare effectiveness as a pre-processing tool.
-
-  \begin{figure}[h]
-    \centering
-    \includegraphics[width=0.58\textwidth]{adversarial_loss}
-    \caption*{Adversarial loss higher quality with larger error\footcite{EnhanceNet}}
-  \end{figure}
+\begin{columns}
+  \begin{column}{0.33\linewidth}
+    \begin{figure}[h]
+      \centering
+        \includegraphics[width=0.9\textwidth]{eyepacs_example_blur}
+      \caption*{Blurred}
+    \end{figure}
+  \end{column}
+  \begin{column}{0.33\linewidth}
+    \begin{figure}[h]
+      \centering
+        \includegraphics[width=0.9\textwidth]{eyepacs_example_sharp}
+      \caption*{Sharpened}
+    \end{figure}
+  \end{column}  \begin{column}{0.33\linewidth}
+    \begin{figure}[h]
+      \centering
+        \includegraphics[width=0.9\textwidth]{eyepacs_example}
+      \caption*{Ground truth\footnotemark}
+    \end{figure}
+  \end{column}
+  \footnotetext{\url{https://www.kaggle.com/c/diabetic-retinopathy-detection}}
+\end{columns}
 \end{frame}
 
 \begin{frame} \frametitle{Timeline}
@@ -334,7 +370,7 @@ Transform images before calculating loss, with feature map $\phi$:
 \ganttbar{$L_1$-based Network}{2017-11-01}{2017-12-30}\\
 \ganttbar{Perceptual Loss}{2017-12-15}{2018-01-30}\\
 \ganttbar{Adversarial Loss}{2018-01-30}{2018-02-20}\\
-\ganttbar{Network Modificatons}{2018-02-20}{2018-03-15}
+\ganttbar{Network Modifications}{2018-02-20}{2018-03-15}
 \end{ganttchart}
 \end{figure} 
 
@@ -346,6 +382,11 @@ Transform images before calculating loss, with feature map $\phi$:
   \item Selection of loss function is important
   \item Need for careful evaluation
 \end{itemize}
+\begin{figure}[h]
+  \centering
+\includegraphics[width=0.9\textwidth]{digitalwindow_screen}
+  \caption*{Use case: Digital Window}
+\end{figure}
 \end{frame}
 
 \end{document}
