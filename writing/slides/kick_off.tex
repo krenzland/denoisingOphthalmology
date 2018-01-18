@@ -66,7 +66,7 @@
 
 \title{Deep-Learning-based Image Denoising in Ophthalmology\\GR kick-off}
 \author{Lukas Krenz\\Advisor: Nicola Rieke\\Director: Prof.\ Dr.\ Nassir Navab}
-\date{January 12, 2018} 
+\date{January 19, 2018} 
 \institute{TUM, Chair for Computer Aided Medical Procedures \textit{\&} Augmented Reality}
 
 \begin{document}
@@ -86,14 +86,14 @@
 \begin{frame}{What are we trying to do?}
 \begin{block}{Idea}
 \begin{itemize}
-\item Improve quality of retinal images
+\item Improve quality of retinal images by super-resolution \textit{\&} deblurring
 \item Should work in an intraoperative setting
 \end{itemize}
 \end{block}
 
 \begin{block}{Use cases}
 \begin{itemize}
-\item Pre-processing for computer vision algorithms (e.g.\ vessel segmentation)
+\item Pre-processing for other computer vision algorithms
 \item Provide improved quality for digital zoom.
 \end{itemize}
 \end{block}
@@ -102,7 +102,7 @@
   \begin{itemize}
   \item Real-time
   \item Different levels of zoom
-  \item Preserve structure of vessels etc.
+  \item Preserve anatomical structure (vessels, etc.\ )
   \end{itemize}
 \end{block}
 \end{frame}
@@ -113,26 +113,35 @@
 \begin{block}{General Super-Resolution}
 Many different super resolution approaches.
     
-E.g.\ based on image statistics, self-simiarity of images, learned patch-databases or \textbf{convolutional neural networks}.
+E.g.\ based on image statistics, self-similarity of images, learned patch-databases or \textbf{convolutional neural networks}.
 
 Only CNNs fulfil \textbf{both} quality and speed constraints
 \end{block}
 
 
 \begin{block}{Opthamology}
-Use CNN-Upscaling\footcite{SaliencyGAN} 
+Uses CNN-Upscaling\footcite{SaliencyGAN} 
 
 Solid results, not optimized for intraoperative use-case
 \end{block}
 \end{frame}
 
-\begin{frame}{Some common CNN-Topologies}
+\begin{frame}{Some common CNN-Topologies\footcite{LapSRN}}
+\begin{columns}
+\begin{column}{0.66\textwidth}
   \begin{figure}[h]
     \centering
-    \includegraphics[width=0.8\textwidth]{sr_architectures.png}
-    \caption*{Common Topologies\footcite{LapSRN}}
-    \label{fig:topologies-cnn}
+    \includegraphics[width=1.0\textwidth]{sr_architectures}
+    \caption*{Common Topologies}
+    \label{fig:lap-srn}
   \end{figure}
+\end{column}
+\begin{column}{0.34\textwidth}
+  \textit{Red}: Convolution\\
+  \textit{Blue}: Transposed Convolution\\
+  \textit{Green}: Summation
+\end{column}
+\end{columns}
 \end{frame}
 
 \begin{frame}{Laplacian Network\footcite{LapSRN}}
@@ -155,9 +164,10 @@ Solid results, not optimized for intraoperative use-case
   \end{enumerate}
 \end{column}
 \end{columns}
+\textit{Red}: $3 \times 3$ convolution, \textit{blue}: transposed convolution, \textit{green} summation
 \end{frame}
 
-\begin{frame}{Robust Loss}
+\begin{frame}{Robust (Charbonnier) Loss\footcite{LapSRN}}
 (Relaxed) $L_1$  loss instead of $L_2$ loss
 \begin{align*}
     \label{eq:charbonnier}
@@ -166,7 +176,7 @@ Solid results, not optimized for intraoperative use-case
     p(\bm{x}) &= \sqrt{ \langle x, x \rangle  + \epsilon^2},
   \end{align*}
 
-Robust, avoids \textbf{blurry} images\footcite{LapSRN}
+Robust, avoids \textbf{blurry} images
 
 \begin{columns}
   \begin{column}{0.33\linewidth}
@@ -192,13 +202,13 @@ Robust, avoids \textbf{blurry} images\footcite{LapSRN}
 \end{columns}
 \end{frame}
 
-\begin{frame}{Perceptual Loss---VGG-based}
+\begin{frame}{Perceptual Loss---VGG-based\footcite{PerceptualLoss}}
 Transform images before calculating loss, with feature map $\phi$:
 \begin{equation*}
     L_p( \hat{\bm{y}}, \bm{y}; \bm{\theta}) = \Vert \phi( \bm{\hat{y}} ) - \phi( \bm{y}) \Vert
 \end{equation*}
 
-  \alert{Possibility 1}: Neural Network based loss, \textbf{automatic} features\footcite{PerceptualLoss}
+  \alert{Possibility 1}: Neural Network based loss, \textbf{automatic} features
 
   Extract feature maps from pre-trained VGG16-Network
 \begin{columns}
@@ -226,8 +236,8 @@ Transform images before calculating loss, with feature map $\phi$:
 \end{frame}
 
 \begin{frame}
-  \frametitle{Perceptual Loss---Saliency Maps}
-   Possibility 2: Saliency Maps\footcite{SaliencyGAN}
+  \frametitle{Perceptual Loss---Saliency Maps\footcite{SaliencyGAN}}
+   \alert{Possibility 2}: Saliency Maps
 
   \textbf{Handcrafted} features
 \begin{columns}
@@ -314,16 +324,17 @@ Transform images before calculating loss, with feature map $\phi$:
   \begin{ganttchart}[
     time slot format=isodate,
     x unit=0.40mm,
-    today=2018-01-12,
+    today=2018-01-19,
     y unit chart=5mm,
     ]{2017-10-01}{2018-04-14}
 \gantttitlecalendar{year, month} \\
-\ganttbar{Pre-processing}{2017-10-19}{2018-02-01}\\
-\ganttbar{Final Evaluation}{2018-02-15}{2018-04-15}\\
-\ganttgroup{Coding}{2017-11-22}{2018-04-15}\\
-\ganttbar{$L_1$-based Network}{2017-11-22}{2018-02-01}\\
-\ganttbar{Perceptual Loss}{2018-01-22}{2018-03-15}\\
-\ganttbar{Adversarial Loss}{2018-02-15}{2018-04-15}
+\ganttbar{Data pre-processing}{2017-11-01}{2018-01-15}\\
+\ganttbar{Final Evaluation}{2018-03-10}{2018-04-01}\\
+\ganttgroup{Implementation}{2017-11-01}{2018-03-10}\\
+\ganttbar{$L_1$-based Network}{2017-11-01}{2017-12-30}\\
+\ganttbar{Perceptual Loss}{2017-12-15}{2018-01-30}\\
+\ganttbar{Adversarial Loss}{2018-01-30}{2018-02-20}\\
+\ganttbar{Network Modificatons}{2018-02-20}{2018-03-15}
 \end{ganttchart}
 \end{figure} 
 
