@@ -17,7 +17,7 @@ find ${raw_dir} \( -name "*.jpeg" -or -name "*.ppm" \) -type f | while read imag
     image_name="$(basename ${raw_path} | cut -f 1 -d '.')" # Remove extension.
     target_name="$(readlink -f ${target_dir}/${image_name}.${extension})"
     # TODO: Find better value for fuzz
-    convert "${raw_path}" -fuzz 20% -bordercolor black -trim +repage -resize 1024x1024 "${target_name}"
+    convert "${raw_path}" -fuzz 20% -bordercolor black -trim +repage "${target_name}"
 done
 
 # Fuzz 20% is a bit too eager for very dark images
