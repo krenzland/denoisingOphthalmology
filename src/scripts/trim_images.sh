@@ -22,4 +22,4 @@ done
 
 # Fuzz 20% is a bit too eager for very dark images
 # Discard them, they aren't that great anyway.
-find "$target_dir" type f -size -100k -delete 
+find "$target_dir" -type f -size -100k -delete 
