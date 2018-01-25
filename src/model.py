@@ -36,31 +36,47 @@ def bilinear_upsample_matrix(filter_size, weights):
             weights[i, j, :, :] = kernel
     
     return torch.Tensor(weights)
+
+class ResidualBlock(nn.Module):
+    def __init__(self):
+        super(ResidualBlock, self).__init__()
+
+        self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
+        self.conv1 = nn.Conv2d(64, 64, 3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(64, 64, 3, stride=1, padding=1)
+
+    def forward(self, x):
+        residual = x
+        x = self.lrelu(self.conv1(x))
+        x = self.conv2(x)
+
+        return residual + x
     
 class FeatureExtraction(nn.Module):
-    def __init__(self, level, depth=3):
+    def __init__(self, depth=3, residual=False):
         super(FeatureExtraction, self).__init__()
         
-        LReLu = nn.LeakyReLU(negative_slope=0.2)
+        LReLu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
         filters = nn.Sequential()
         
-        # First layer is connected to input image, we only use Y color channel!
-        if level == 0:
-            filters.add_module(f'conv_input', nn.Conv2d(1, 64, 3, stride=1, padding=1))
-            filters.add_module(f'lrelu_input', LReLu)
-
         for i in range(depth):
-            filters.add_module(f'conv{i}', nn.Conv2d(64, 64, 3, stride=1, padding=1))
-            filters.add_module(f'lrelu{i}', LReLu)                               
+            if residual:
+                filters.add_module(f'conv{i}', ResidualBlock())
+            else:
+                filters.add_module(f'conv{i}', nn.Conv2d(64, 64, 3, stride=1, padding=1))
+                filters.add_module(f'lrelu{i}', LReLu)                               
 
         filters.add_module('convt_upsample', nn.ConvTranspose2d(64, 64, 4, stride=2, padding=1))
-        filters.add_module('lrelu_upsame', LReLu)                   
+        #filters.add_module('nn_upsample', nn.Upsample(scale_factor=2, mode='nearest'))
+        #filters.add_module('conv_upsample', nn.Conv2d(64, 64, 3, stride=1, padding=1))
+        filters.add_module('lrelu_upsample', LReLu)                   
         
         self.seq = filters
         
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 init.kaiming_normal(m.weight, a=0.2)
+                m.bias.data.fill_(0.0)
             if isinstance(m, nn.ConvTranspose2d):
                 m.weight.data.copy_(bilinear_upsample_matrix(4, m.weight.data))
         
@@ -73,18 +89,24 @@ class ImageReconstruction(nn.Module):
         super(ImageReconstruction, self).__init__()
         self.conv_residual = nn.Conv2d(64, 1, 3, stride=1, padding=1) # last filter -> res
         self.upsample = nn.ConvTranspose2d(1, 1, 4, stride=2, padding=1)
+        #self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
+        #self.upsample = nn.Sequential(nn.Upsample(scale_factor=2, mode='nearest'),
+        #                             nn.Conv2d(1, 1, 3, stride=1, padding=1))
 
-        self.upsample.weight.data.copy_(bilinear_upsample_matrix(4, self.upsample.weight))
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
+                # No He init here, as not followed by LRelu?
+                #init.orthogonal(m.weight)
                 init.kaiming_normal(m.weight, a=0.2)
+                m.bias.data.fill_(0.0)
             if isinstance(m, nn.ConvTranspose2d):
                 m.weight.data.copy_(bilinear_upsample_matrix(4, m.weight.data))
         
     def forward(self, lr_image, hr_filter):
         upsampled = self.upsample(lr_image)
         residual = self.conv_residual(hr_filter)
-        return upsampled + residual
+        hr = upsampled + residual
+        return hr
     
 class LapSRN(nn.Module):
     def __init__(self, upsampling_factor=4, depth=5):
@@ -98,16 +120,20 @@ class LapSRN(nn.Module):
         # As a work-around create layers for 8x-upsampling and ignore unneeded layers
         # TODO: Use http://pytorch.org/docs/0.3.0/nn.html#modulelist
 
-        self.feature_extraction0 = FeatureExtraction(level=0, depth=depth)
-        self.feature_extraction1 = FeatureExtraction(level=1, depth=depth)
-        self.feature_extraction2 = FeatureExtraction(level=2, depth=depth)
+        self.in_conv = nn.Sequential((nn.Conv2d(1, 64, 3, stride=1, padding=1)), nn.LeakyReLU(negative_slope=0.2, inplace=True))
+        init.kaiming_normal(self.in_conv[0].weight, a=0.2)
+        self.in_conv[0].bias.data.fill_(0.0)
         
+        self.feature_extraction0 = FeatureExtraction(depth=depth)
+        self.feature_extraction1 = FeatureExtraction(depth=depth)
+        self.feature_extraction2 = FeatureExtraction(depth=depth)
+
         self.image_reconstruction0 = ImageReconstruction()
         self.image_reconstruction1 = ImageReconstruction()
         self.image_reconstruction2 = ImageReconstruction()
 
     def forward(self, image):
-        features0 = self.feature_extraction0(image)
+        features0 = self.feature_extraction0(self.in_conv(image))
         hr2 = self.image_reconstruction0(image, features0)
         
         features1 = self.feature_extraction1(features0)
