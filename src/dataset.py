@@ -56,6 +56,21 @@ class RandomRotation(object):
         angle = self.get_params(self.angles)
         return img.rotate(angle, expand=True)
 
+class SmartRandomCrop(object):
+    def __init__(self, crop_size, black_threshold):
+        self.random_crop = RandomCrop(crop_size)
+        self.black_treshold = black_threshold
+
+    def __call__(self, img):
+        crop = None
+        for i in range(0, 100):
+            crop = self.random_crop(img)
+
+            count_black = (1.0*(np.array(crop) < 10)).sum()
+            if count_black < self.black_treshold:
+                return crop
+        return crop
+
 def load_image(path):
     # We only use the Y channel for the upscaling.
     img = Image.open(path).convert('YCbCr')
@@ -163,7 +178,8 @@ def get_hr_transform(crop_size, random=True):
             RandomRotation(),
             RandomHorizontalFlip(),
             RandomVerticalFlip(),
-            RandomCrop(crop_size),
+            #RandomCrop(crop_size),
+            SmartRandomCrop(crop_size, (crop_size**2)//2)
         ])
     else:
         return CenterCrop(crop_size)
