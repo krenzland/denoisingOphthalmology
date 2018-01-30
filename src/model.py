@@ -126,11 +126,9 @@ class LapSRN(nn.Module):
         
         self.feature_extraction0 = FeatureExtraction(depth=depth)
         self.feature_extraction1 = FeatureExtraction(depth=depth)
-        self.feature_extraction2 = FeatureExtraction(depth=depth)
 
         self.image_reconstruction0 = ImageReconstruction()
         self.image_reconstruction1 = ImageReconstruction()
-        self.image_reconstruction2 = ImageReconstruction()
 
     def forward(self, image):
         features0 = self.feature_extraction0(self.in_conv(image))
@@ -139,7 +137,4 @@ class LapSRN(nn.Module):
         features1 = self.feature_extraction1(features0)
         hr4 = self.image_reconstruction1(hr2, features1) 
       
-        features2 = self.feature_extraction2(features1)
-        hr8 = self.image_reconstruction2(hr4, features2)
-
-        return hr2, hr4, hr8
+        return hr2, hr4
