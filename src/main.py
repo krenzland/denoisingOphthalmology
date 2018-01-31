@@ -97,6 +97,9 @@ def main():
                         help="Set batch size. Default: 32")
     parser.add_argument('--num-epochs', type=int, default=16670,
                         help="Set number of epochs. Default: 16670")
+    # Directories
+    parser.add_argument('--data-dir', default='../data/processed/messidor',
+                        help="Sets tensorboard run directory, default ../data/processed/messidor")
     parser.add_argument('--tensorboard-dir', default='../runs',
                         help="Sets tensorboard run directory, default ../runs/")
     parser.add_argument('--checkpoint', help="Path to checkpoint file.")
@@ -135,15 +138,13 @@ def main():
 
     scheduler = lr_scheduler.StepLR(optimizer, step_size=3334, gamma=0.5, last_epoch = start_epoch - 1) # See paper
 
-    # Load datasets and set transforms.
-    data_path = '../data/processed/messidor'
-    
     # Set needed data transformations.
     CROP_SIZE = 128 # was 128 in paper
     hr_transform = get_hr_transform(CROP_SIZE, random=True)
     lr_transforms = [get_lr_transform(CROP_SIZE, factor, random=True) for factor in [2, 4]]
 
-    dataset = Dataset(data_path, hr_transform=hr_transform, lr_transforms=lr_transforms, verbose=True)
+    # Load datasets and set transforms.
+    dataset = Dataset(args.data_dir, hr_transform=hr_transform, lr_transforms=lr_transforms, verbose=True)
     train_dataset = SplitDataset(dataset, Split.TRAIN, 0.8) 
     validation_dataset = SplitDataset(dataset, Split.TEST, 0.8)
     train_data = data.DataLoader(dataset=train_dataset, num_workers=16,\
