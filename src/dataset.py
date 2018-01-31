@@ -86,7 +86,7 @@ class Dataset(data.Dataset):
         
         image_suffixes = ['jpg', 'jpeg', 'tif', 'ppm', 'png']        
         full_filename = lambda f: os.path.abspath(os.path.join(path, f))
-        is_image = lambda f: any([f.endswith(f'{suff}') for suff in image_suffixes])
+        is_image = lambda f: any([f.endswith(suff) for suff in image_suffixes])
         
         self.filenames = [full_filename(f) for f in os.listdir(path) if is_image(f)]
 
@@ -94,7 +94,7 @@ class Dataset(data.Dataset):
         for i,f in enumerate(self.filenames):
             self.images.append(load_image(f))
             if verbose and i % 50 == 0:
-                print(f"Dataset loading, {i} out of {len(self.filenames)} images read!") 
+                print("Dataset loading, {} out of {} images read!".format(i, len(self.filenames))) 
         
     def __len__(self):
         return len(self.images)
@@ -133,7 +133,7 @@ class SplitDataset(data.Dataset):
                 raise ValueError('Split==all implies no ratio')
         else:
             if split_ratio is None or not(0.0 < split_ratio < 1.0):
-                raise ValueError(f'{split_ratio} is not a valid ratio!')
+                raise ValueError('{} is not a valid ratio!'.format(split_ratio))
                 
         self.dataset = dataset
         self.split = split

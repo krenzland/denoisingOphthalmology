@@ -61,10 +61,10 @@ class FeatureExtraction(nn.Module):
         
         for i in range(depth):
             if residual:
-                filters.add_module(f'conv{i}', ResidualBlock())
+                filters.add_module('conv{}'.format(i), ResidualBlock())
             else:
-                filters.add_module(f'conv{i}', nn.Conv2d(64, 64, 3, stride=1, padding=1))
-                filters.add_module(f'lrelu{i}', LReLu)                               
+                filters.add_module('conv{}'.format(i), nn.Conv2d(64, 64, 3, stride=1, padding=1))
+                filters.add_module('lrelu{}'.format(i), LReLu)
 
         filters.add_module('convt_upsample', nn.ConvTranspose2d(64, 64, 4, stride=2, padding=1))
         #filters.add_module('nn_upsample', nn.Upsample(scale_factor=2, mode='nearest'))

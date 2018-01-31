@@ -45,10 +45,11 @@ def train(epoch, model, criterion, optimizer, writer, train_data):
         #     p.grad.data.clamp_(-clip, clip)
         optimizer.step()
         
-        if ((it + 1)% (len(train_data)//10) == 0): # or it == (len(train_data) -1)):
-            print(f"Epoch={epoch}, Batch={it + 1}/{len(train_data)}, Avg. loss = {cum_loss/(it+1)}")
+        if ((it + 1)% (len(train_data)//10) == 0):
+            print("Epoch={}, Batch={}/{}, Avg. loss = {}".format(epoch, it + 1, len(train_data),
+                                                                 cum_loss/(it+1)))
             
-    print(f"Epoch={epoch}, Loss = {cum_loss}")
+    print("Epoch={}, Loss={}".format(epoch, cum_loss))
     writer.add_scalar('data/training_error', cum_loss, epoch)
  
 def validate(epoch, model, writer, validation_data):
@@ -66,7 +67,7 @@ def validate(epoch, model, writer, validation_data):
         cum_psnr2 += get_psnr(error_1)
         cum_psnr4 += get_psnr(error_2)
 
-    print(f"Avg. PSNR: {cum_psnr2/len(validation_data)}, {cum_psnr4/len(validation_data)}.")
+    print("Avg. PSNR: {}, {}.".format(cum_psnr2/len(validation_data),cum_psnr4/len(validation_data)))
     writer.add_scalar('data/validation_2', cum_psnr2/len(validation_data), epoch)
     writer.add_scalar('data/validation_4', cum_psnr4/len(validation_data), epoch)
 
@@ -75,7 +76,7 @@ def validate(epoch, model, writer, validation_data):
     out = model(Variable(lr).cuda().unsqueeze(0))
     for factor, img in enumerate(out):
         upscaled = img.cpu().data
-        writer.add_image(f'images/sr_{2**(factor + 1)}', upscaled, epoch)
+        writer.add_image('images/sr_{}'.format(2**(factor+1)), upscaled, epoch)
 
     return cum_psnr2 + cum_psnr4
 
@@ -96,6 +97,8 @@ def main():
                         help="Set batch size. Default: 32")
     parser.add_argument('--num-epochs', type=int, default=16670,
                         help="Set number of epochs. Default: 16670")
+    parser.add_argument('--tensorboard-dir', default='../runs',
+                        help="Sets tensorboard run directory, default ../runs/")
     parser.add_argument('--checkpoint', help="Path to checkpoint file.")
     parser.add_argument('--checkpoint-dir', default='../checkpoints',
                         help="Sets checkpoint directory, default ../checkpoints/")
@@ -103,7 +106,7 @@ def main():
                         help="Sets how often a checkpoint gets written. Default: 333")
 
     args = parser.parse_args()
-    print(f"Called with args={args}")
+    print("Called with args={}".format(args))
 
     # Generate and print random seed:
     if args.seed:
@@ -113,7 +116,7 @@ def main():
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     np.random.seed(seed)
-    print(f"Using seed={seed}.")
+    print("Using seed={}.".format(seed))
     
     model = LapSRN(depth=args.depth).cuda().train()
 
@@ -149,22 +152,22 @@ def main():
                                       batch_size=args.batch_size, shuffle=True, pin_memory=True)
 
     # Initialise logging
-    writer = SummaryWriter()
+    writer = SummaryWriter(args.tensorboard_dir)
 
     for epoch in range(start_epoch, args.num_epochs+1):
-        print(f"Started epoch num={epoch}.")
+        print("Started epoch num={}.".format(epoch))
         scheduler.step()
         print('Learning rate is {:.7E}'.format(optimizer.param_groups[0]['lr']))
         writer.add_scalar('hyper/lr', optimizer.param_groups[0]['lr'], epoch)
         train(epoch, model, criterion, optimizer, writer, train_data)
 
         validate_every = 67 # epochs
-        if (epoch % validate_every) or (epoch == args.num_epochs+1) == 0:
+        if (epoch % validate_every) == 0 or (epoch == args.num_epochs+1):
             cum_psnr = validate(epoch, model, writer, validation_data)
 
-        if (epoch % args.checkpoint_every) == 0 or (epoch == args.num_epochs+1) == 0:
-            checkpoint_name = Path(args.checkpoint_dir) / f'srn_{epoch}.pt'
-            print(f"Wrote checkpoint {checkpoint_name}!")
+        if (epoch % args.checkpoint_every) == 0 or (epoch == args.num_epochs+1):
+            checkpoint_name = Path(args.checkpoint_dir) / 'srn_{}.pt'.format(epoch)
+            print("Wrote checkpoint {}!".format(checkpoint_name))
             save_checkpoint(epoch, model, optimizer, checkpoint_name)
 
 if __name__ == '__main__':
