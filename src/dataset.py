@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 import os
 from enum import Enum
+import numbers
+import random
+from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageFilter
@@ -20,7 +23,7 @@ class RandomScaling(object):
     def get_params():
         return np.random.uniform(0.5, 1.0)
         
-    def __call__(self, img):
+    def __call__(self, img, vessels=None):
         """
         Args:
             img (PIL Image): Image to be scaled by random factor \in (0.5, 1.0).
@@ -34,7 +37,14 @@ class RandomScaling(object):
         nW = max(self.crop_size, int(s * oW))
         nH = max(self.crop_size, int(s * oH))
         new_size = nW, nH
-        return F.resize(img, new_size, self.interpolation)
+
+        img = F.resize(img, new_size, self.interpolation)
+
+        if vessels is not None:
+            vessels = F.resize(img, new_size, self.interpolation)
+            return img, vessels
+        else:
+            return img
 
 class RandomRotation(object):
     def __init__(self, angles=np.array([0, 90, 180, 270])):
@@ -46,7 +56,7 @@ class RandomRotation(object):
 
         return angle
 
-    def __call__(self, img):
+    def __call__(self, img, vessels):
         """
         Args:
             img (PIL Image): Image to be rotated.
@@ -54,22 +64,92 @@ class RandomRotation(object):
             PIL Image: Rotated image.
         """
         angle = self.get_params(self.angles)
-        return img.rotate(angle, expand=True)
+        img = img.rotate(angle, expand=True)
+        if vessels is not None:
+            vessels = vessels.rotate(angle, expand=True) 
+            return img, vessels
+        else:
+            return img
+
+class RandomFlip(object):
+    def __call__(self, img, vessels):
+        """
+        Args:
+            img (PIL Image): Image to be flipped.
+        Returns:
+            PIL Image: Randomly flipped image.
+        """
+        flip_vertical = random.random() < 0.5
+        flip_horicontal = random.random() < 0.5
+
+        if flip_vertical:
+            img = img.transpose(Image.FLIP_TOP_BOTTOM)
+            vessels = vessels.transpose(Image.FLIP_TOP_BOTTOM)
+
+        if flip_horicontal:
+            img = img.transpose(Image.FLIP_LEFT_RIGHT)
+            vessels = vessels.transpose(Image.FLIP_LEFT_RIGHT)
+
+        return img, vessels
+
+    def __repr__(self):
+        return self.__class__.__name__ + '()'
 
 class SmartRandomCrop(object):
-    def __init__(self, crop_size, black_threshold):
-        self.random_crop = RandomCrop(crop_size)
-        self.black_treshold = black_threshold
+    """Copied from torchvision RandomCrop"""
+    def __init__(self, size, padding=0):
+        if isinstance(size, numbers.Number):
+            self.size = (int(size), int(size))
+        else:
+            self.size = size
+        self.padding = padding
 
-    def __call__(self, img):
+    @staticmethod
+    def get_params(img, output_size):
+        """Get parameters for ``crop`` for a random crop.
+        Args:
+            img (PIL Image): Image to be cropped.
+            output_size (tuple): Expected output size of the crop.
+        Returns:
+            tuple: params (i, j, h, w) to be passed to ``crop`` for random crop.
+        """
+        w, h = img.size
+        th, tw = output_size
+        if w == tw and h == th:
+            return 0, 0, h, w
+
+        i = random.randint(0, h - th)
+        j = random.randint(0, w - tw)
+        return i, j, th, tw
+
+    def _is_good_crop(self, crop, vessels):
+        is_not_black = (1.0*(np.array(crop) < 30)).sum() < (self.size[0]**2)//2
+        contains_vessels =  (1.0 * (np.array(vessels) > 80)).sum() > (128*20)
+        return is_not_black and contains_vessels
+    
+    def __call__(self, img, vessels):
+        """
+        Args:
+            img (PIL Image): Image to be cropped.
+        Returns:
+            PIL Image: Cropped image.
+        """
+        if self.padding > 0:
+            img = F.pad(img, self.padding)
+
         crop = None
-        for i in range(0, 100):
-            crop = self.random_crop(img)
-
-            count_black = (1.0*(np.array(crop) < 10)).sum()
-            if count_black < self.black_treshold:
+        max_tries = 20
+        for it in range(max_tries):
+            i, j, h, w = self.get_params(img, self.size)
+            crop = img.crop((j, i, j + w, i + h))
+            crop_vessels = vessels.crop((j, i, j + w, i + h))
+            if self._is_good_crop(crop, crop_vessels):
                 return crop
-        return crop
+        # Giving up
+        return crop        
+
+    def __repr__(self):
+        return self.__class__.__name__ + '(size={0})'.format(self.size)
 
 def load_image(path):
     # We only use the Y channel for the upscaling.
@@ -91,8 +171,15 @@ class Dataset(data.Dataset):
         self.filenames = [full_filename(f) for f in os.listdir(path) if is_image(f)]
 
         self.images = []
+        self.vessels = []
+        
         for i,f in enumerate(self.filenames):
             self.images.append(load_image(f))
+
+            # Load vessel data
+            f = Path(f)
+            vessel_file_name = f.parent / 'vessels' / (f.stem + '.jpg') 
+            self.vessels.append(load_image(str(vessel_file_name)))
             if verbose and i % 50 == 0:
                 print("Dataset loading, {} out of {} images read!".format(i, len(self.filenames))) 
         
@@ -101,9 +188,10 @@ class Dataset(data.Dataset):
     
     def __getitem__(self, idx):
         img = self.images[idx]
+        vessels = self.vessels[idx]
         
         # Compute all transformations for the downscaled versions.
-        hr = self.hr_transform(img)
+        hr = self.hr_transform(img, vessels)
         
         imgs = [hr]
         for transform in self.lr_transforms:
@@ -171,18 +259,31 @@ def get_lr_transform(crop_size, factor, random=True):
     else:
         return Resize(crop_size//factor, interpolation=Image.BICUBIC)
 
+class HrTransform(object):
+    def __init__(self, crop_size, random=True):
+        self.crop_size = crop_size
+        if random:
+            self.random_scaling = RandomScaling(crop_size)
+            self.random_rotation = RandomRotation()
+            self.random_flip = RandomFlip()
+            self.crop = SmartRandomCrop(crop_size)
+        else:
+            self.augmentations = lambda img: img
+            self.crop = CenterCrop(crop_size)
+        self.random = random
+
+    def __call__(self, img, vessels):
+        if self.random:
+            img, vessels = self.random_scaling(img, vessels)
+            img, vessels = self.random_rotation(img, vessels)
+            img, vessels = self.random_flip(img, vessels)
+            return self.crop(img, vessels)
+        else:
+            return self.crop(img) 
+        
+
 def get_hr_transform(crop_size, random=True):
-    if random:
-        return Compose([
-            RandomScaling(crop_size),
-            RandomRotation(),
-            RandomHorizontalFlip(),
-            RandomVerticalFlip(),
-            #RandomCrop(crop_size),
-            SmartRandomCrop(crop_size, (crop_size**2)//2)
-        ])
-    else:
-        return CenterCrop(crop_size)
+    return HrTransform(crop_size, random=random)
 
 blur_filter = lambda img: img.filter(ImageFilter.GaussianBlur(0 * np.random.uniform(0,1)))
 # TODO: Add blur!

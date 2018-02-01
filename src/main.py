@@ -39,7 +39,7 @@ def train(epoch, model, criterion, optimizer, writer, train_data):
         
         loss.backward()
         # Maybe clip gradient adaptively as in https://arxiv.org/pdf/1511.04587.pdf
-        nn.utils.clip_grad_norm(model.parameters(), 1000) # Fixes NaN in SGD for first iteration with high LR.
+        #nn.utils.clip_grad_norm(model.parameters(), 1000) # Fixes NaN in SGD for first iteration with high LR.
         # clip = 0.001 / optimizer.param_groups[0]['lr']
         # for p in model.parameters():
         #     p.grad.data.clamp_(-clip, clip)
