@@ -163,10 +163,10 @@ def main():
         train(epoch, model, criterion, optimizer, writer, train_data)
 
         validate_every = 67 # epochs
-        if (epoch % validate_every) == 0 or (epoch == args.num_epochs+1):
+        if (epoch % validate_every) == 0 or (epoch == args.num_epochs):
             cum_psnr = validate(epoch, model, writer, validation_data)
 
-        if (epoch % args.checkpoint_every) == 0 or (epoch == args.num_epochs+1):
+        if (epoch % args.checkpoint_every) == 0 or (epoch == args.num_epochs):
             checkpoint_name = Path(args.checkpoint_dir) / 'srn_{}.pt'.format(epoch)
             print("Wrote checkpoint {}!".format(checkpoint_name))
             save_checkpoint(epoch, model, optimizer, checkpoint_name)
