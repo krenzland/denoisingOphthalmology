@@ -157,7 +157,7 @@ def load_image(path):
     return img.split()[0]
 
 class Dataset(data.Dataset):
-    def __init__(self, path, hr_transform, lr_transforms, verbose=False):
+    def __init__(self, path, hr_transform, lr_transforms, verbose=False, seed=19534):
         super(Dataset, self).__init__
         
         self.hr_transform = hr_transform
@@ -169,6 +169,7 @@ class Dataset(data.Dataset):
         is_image = lambda f: any([f.endswith(suff) for suff in image_suffixes])
         
         self.filenames = [full_filename(f) for f in os.listdir(path) if is_image(f)]
+        random.Random(seed).shuffle(self.filenames)
 
         self.images = []
         self.vessels = []
@@ -268,7 +269,6 @@ class HrTransform(object):
             self.random_flip = RandomFlip()
             self.crop = SmartRandomCrop(crop_size)
         else:
-            self.augmentations = lambda img: img
             self.crop = CenterCrop(crop_size)
         self.random = random
 
