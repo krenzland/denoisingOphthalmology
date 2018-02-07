@@ -88,11 +88,11 @@ class FeatureExtraction(nn.Module):
 class ImageReconstruction(nn.Module):
     def __init__(self):
         super(ImageReconstruction, self).__init__()
-        self.conv_residual = nn.Conv2d(64, 1, 3, stride=1, padding=1) # last filter -> res
-        self.upsample = nn.ConvTranspose2d(1, 1, 4, stride=2, padding=1)
-        #self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
+        self.conv_residual = nn.Conv2d(64, 3, 3, stride=1, padding=1) # last filter -> res
+        self.upsample = nn.ConvTranspose2d(3, 3, 4, stride=2, padding=1)
+        self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
         #self.upsample = nn.Sequential(nn.Upsample(scale_factor=2, mode='nearest'),
-        #                             nn.Conv2d(1, 1, 3, stride=1, padding=1))
+        #                            nn.Conv2d(3, 3, 3, stride=1, padding=1))
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -122,7 +122,7 @@ class LapSRN(nn.Module):
         # As a work-around create layers for 8x-upsampling and ignore unneeded layers
         # TODO: Use http://pytorch.org/docs/0.3.0/nn.html#modulelist
 
-        self.in_conv = nn.Sequential((nn.Conv2d(1, 64, 3, stride=1, padding=1)), nn.LeakyReLU(negative_slope=0.2, inplace=True))
+        self.in_conv = nn.Sequential((nn.Conv2d(3, 64, 3, stride=1, padding=1)), nn.LeakyReLU(negative_slope=0.2, inplace=True))
         #init.kaiming_normal(self.in_conv[0].weight, a=0.2)
         init.xavier_normal(self.in_conv[0].weight)
         self.in_conv[0].bias.data.fill_(0.0)

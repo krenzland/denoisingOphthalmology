@@ -13,7 +13,7 @@ from PIL import Image
 from torchvision.transforms import Resize
 
 from model import LapSRN
-from loss import CharbonnierLoss
+from loss import CharbonnierLoss, make_vgg16_loss
 from dataset import Dataset, Split, SplitDataset, get_lr_transform, get_hr_transform
 
 def save_checkpoint(epoch, model, optimizer, filename):
@@ -40,9 +40,9 @@ def train(epoch, model, criterion, optimizer, writer, train_data):
         loss.backward()
         # Maybe clip gradient adaptively as in https://arxiv.org/pdf/1511.04587.pdf
         #nn.utils.clip_grad_norm(model.parameters(), 1000) # Fixes NaN in SGD for first iteration with high LR.
-        # clip = 0.001 / optimizer.param_groups[0]['lr']
-        # for p in model.parameters():
-        #     p.grad.data.clamp_(-clip, clip)
+        #clip = 0.01 / optimizer.param_groups[0]['lr']
+        #for p in model.parameters():
+        #    p.grad.data.clamp_(-clip, clip)
         optimizer.step()
         
         if ((it + 1)% (len(train_data)//10) == 0):
@@ -75,7 +75,7 @@ def validate(epoch, model, writer, validation_data):
     lr, _hr2, _hr4 = validation_data.dataset[np.random.randint(0, len(validation_data.dataset))]
     out = model(Variable(lr).cuda().unsqueeze(0))
     for factor, img in enumerate(out):
-        upscaled = img.cpu().data
+        upscaled = img.cpu().data.clamp(0,1)
         writer.add_image('images/sr_{}'.format(2**(factor+1)), upscaled, epoch)
 
     return cum_psnr2 + cum_psnr4
@@ -125,7 +125,9 @@ def main():
 
     # Paper uses SGD with LR=1e-5
     optimizer = optim.SGD(model.parameters(), weight_decay=1e-4, lr=args.lr, momentum=0.9)
+    optimizer = optim.Adam(model.parameters(), weight_decay=1e-4, lr=args.lr)
     criterion = CharbonnierLoss().cuda()
+    #criterion = make_vgg16_loss(criterion).cuda()
 
     if args.checkpoint:
         checkpoint = torch.load(args.checkpoint)
@@ -137,6 +139,7 @@ def main():
         start_epoch = 0
 
     scheduler = lr_scheduler.StepLR(optimizer, step_size=3334, gamma=0.5, last_epoch = start_epoch - 1) # See paper
+    #scheduler = lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.5, last_epoch = start_epoch - 1) # See paper
 
     # Set needed data transformations.
     CROP_SIZE = 128 # was 128 in paper
@@ -147,9 +150,9 @@ def main():
     dataset = Dataset(args.data_dir, hr_transform=hr_transform, lr_transforms=lr_transforms, verbose=True)
     train_dataset = SplitDataset(dataset, Split.TRAIN, 0.8) 
     validation_dataset = SplitDataset(dataset, Split.TEST, 0.8)
-    train_data = data.DataLoader(dataset=train_dataset, num_workers=16,\
+    train_data = data.DataLoader(dataset=train_dataset, num_workers=2,\
                                  batch_size=args.batch_size, shuffle=True, pin_memory=True)
-    validation_data = data.DataLoader(dataset=validation_dataset, num_workers=16,\
+    validation_data = data.DataLoader(dataset=validation_dataset, num_workers=2,\
                                       batch_size=args.batch_size, shuffle=True, pin_memory=True)
 
     # Initialise logging
@@ -162,12 +165,12 @@ def main():
         writer.add_scalar('hyper/lr', optimizer.param_groups[0]['lr'], epoch)
         train(epoch, model, criterion, optimizer, writer, train_data)
 
-        validate_every = 67 # epochs
+        validate_every = 1 # epochs
         if (epoch % validate_every) == 0 or (epoch == args.num_epochs):
             cum_psnr = validate(epoch, model, writer, validation_data)
 
         if (epoch % args.checkpoint_every) == 0 or (epoch == args.num_epochs):
-            checkpoint_name = Path(args.checkpoint_dir) / 'srn_{}.pt'.format(epoch)
+            checkpoint_name = str(Path(args.checkpoint_dir) / 'srn_{}.pt'.format(epoch))
             print("Wrote checkpoint {}!".format(checkpoint_name))
             save_checkpoint(epoch, model, optimizer, checkpoint_name)
 

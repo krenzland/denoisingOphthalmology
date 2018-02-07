@@ -6,10 +6,14 @@ import random
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageFilter
+from PIL import Image, ImageFilter, ImageFile
 import torch.utils.data as data
-from torchvision.transforms import Compose, RandomCrop, ToTensor, Resize, RandomHorizontalFlip, RandomVerticalFlip, Lambda, CenterCrop
+from torchvision.transforms import Compose, RandomCrop, ToTensor, Resize, RandomHorizontalFlip, RandomVerticalFlip, Lambda, CenterCrop, Grayscale
 import torchvision.transforms.functional as F
+
+# See: https://github.com/keras-team/keras/issues/5475
+# Only affects validation set!
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 class RandomScaling(object):
     """Resize the input PIL Image by a factor of (0.5, 1.0)
@@ -98,6 +102,7 @@ class RandomFlip(object):
 class SmartRandomCrop(object):
     """Copied from torchvision RandomCrop"""
     def __init__(self, size, padding=0):
+        self.grayscale = Grayscale()
         if isinstance(size, numbers.Number):
             self.size = (int(size), int(size))
         else:
@@ -123,7 +128,7 @@ class SmartRandomCrop(object):
         return i, j, th, tw
 
     def _is_good_crop(self, crop, vessels):
-        is_not_black = (1.0*(np.array(crop) < 30)).sum() < (self.size[0]**2)//2
+        is_not_black = (1.0*(np.array(self.grayscale(crop))) < 30).sum() < (self.size[0]**2)//2
         contains_vessels =  (1.0 * (np.array(vessels) > 80)).sum() > (128*20)
         return is_not_black and contains_vessels
     
@@ -153,8 +158,9 @@ class SmartRandomCrop(object):
 
 def load_image(path):
     # We only use the Y channel for the upscaling.
-    img = Image.open(path).convert('YCbCr')
-    return img.split()[0]
+    # img = Image.open(path).convert('YCbCr')
+    # return img.split()[0]
+    return Image.open(path)
 
 class Dataset(data.Dataset):
     def __init__(self, path, hr_transform, lr_transforms, verbose=False, seed=19534):
@@ -180,7 +186,7 @@ class Dataset(data.Dataset):
             # Load vessel data
             f = Path(f)
             vessel_file_name = f.parent / 'vessels' / (f.stem + '.jpg') 
-            self.vessels.append(load_image(str(vessel_file_name)))
+            self.vessels.append(load_image(str(vessel_file_name)).convert('YCbCr').split()[0])
             if verbose and i % 50 == 0:
                 print("Dataset loading, {} out of {} images read!".format(i, len(self.filenames))) 
         
