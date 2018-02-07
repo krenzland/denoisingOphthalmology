@@ -160,7 +160,9 @@ def load_image(path):
     # We only use the Y channel for the upscaling.
     # img = Image.open(path).convert('YCbCr')
     # return img.split()[0]
-    return Image.open(path)
+    img = Image.open(pat)
+    img.load()
+    return img 
 
 class Dataset(data.Dataset):
     def __init__(self, path, hr_transform, lr_transforms, verbose=False, seed=19534):
