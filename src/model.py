@@ -75,7 +75,8 @@ class FeatureExtraction(nn.Module):
         
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                init.kaiming_normal(m.weight, a=0.2)
+                #init.kaiming_normal(m.weight, a=0.2)
+                init.xavier_normal(m.weight)
                 m.bias.data.fill_(0.0)
             if isinstance(m, nn.ConvTranspose2d):
                 m.weight.data.copy_(bilinear_upsample_matrix(4, m.weight.data))
@@ -97,7 +98,8 @@ class ImageReconstruction(nn.Module):
             if isinstance(m, nn.Conv2d):
                 # No He init here, as not followed by LRelu?
                 #init.orthogonal(m.weight)
-                init.kaiming_normal(m.weight, a=0.2)
+                #init.kaiming_normal(m.weight, a=0.2)
+                init.xavier_normal(m.weight)
                 m.bias.data.fill_(0.0)
             if isinstance(m, nn.ConvTranspose2d):
                 m.weight.data.copy_(bilinear_upsample_matrix(4, m.weight.data))
@@ -121,7 +123,8 @@ class LapSRN(nn.Module):
         # TODO: Use http://pytorch.org/docs/0.3.0/nn.html#modulelist
 
         self.in_conv = nn.Sequential((nn.Conv2d(1, 64, 3, stride=1, padding=1)), nn.LeakyReLU(negative_slope=0.2, inplace=True))
-        init.kaiming_normal(self.in_conv[0].weight, a=0.2)
+        #init.kaiming_normal(self.in_conv[0].weight, a=0.2)
+        init.xavier_normal(self.in_conv[0].weight)
         self.in_conv[0].bias.data.fill_(0.0)
         
         self.feature_extraction0 = FeatureExtraction(depth=depth)
