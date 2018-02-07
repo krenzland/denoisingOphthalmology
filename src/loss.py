@@ -6,7 +6,7 @@ import torch.nn as nn
 from torchvision.models import vgg16, VGG
 
 class CharbonnierLoss(nn.Module):
-    def __init__(self, eps=1e-3):
+    def __init__(self, eps=1e-6):
         """
         Eps is a relaxation parameter, the paper sets it to 1e-3.
         """
@@ -54,12 +54,13 @@ class PerceptualLoss(nn.Module):
     def forward(self, x, y):
         # x/y only have the y-channel, vgg expects RGB values.
         # Just use y as r/g/b each.
-        featX = self.loss_network(torch.cat((x,x,x), 1))
-        featY = self.loss_network(torch.cat((y,y,y), 1))
+        featX = self.loss_network(x)
+        featY = self.loss_network(y)
         
         content_loss = 0.0
         for a, b in zip(featX, featY):
-            content_loss += self.criterion(a, b)
+            # normalize all activations to 1
+            content_loss += self.criterion(a/a.norm(), b/b.norm())
             
         return content_loss
 
