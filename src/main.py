@@ -165,7 +165,7 @@ def main():
         writer.add_scalar('hyper/lr', optimizer.param_groups[0]['lr'], epoch)
         train(epoch, model, criterion, optimizer, writer, train_data)
 
-        validate_every = 1 # epochs
+        validate_every = 67 # epochs
         if (epoch % validate_every) == 0 or (epoch == args.num_epochs):
             cum_psnr = validate(epoch, model, writer, validation_data)
 
