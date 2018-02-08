@@ -90,7 +90,7 @@ class ImageReconstruction(nn.Module):
         super(ImageReconstruction, self).__init__()
         self.conv_residual = nn.Conv2d(64, 3, 3, stride=1, padding=1) # last filter -> res
         self.upsample = nn.ConvTranspose2d(3, 3, 4, stride=2, padding=1)
-        self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
+        #self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
         #self.upsample = nn.Sequential(nn.Upsample(scale_factor=2, mode='nearest'),
         #                            nn.Conv2d(3, 3, 3, stride=1, padding=1))
 
