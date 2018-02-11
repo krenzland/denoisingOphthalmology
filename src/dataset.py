@@ -286,11 +286,13 @@ class HrTransform(object):
 
     def __call__(self, img, vessels):
         if self.random:
+            # Needs to be done before cropping
             img, vessels = self.random_scaling(img, vessels)
+            img, vessels = self.crop(img, vessels)
             img, vessels = self.random_rotation(img, vessels)
             img, vessels = self.random_flip(img, vessels)
             img = self.color_jitter(img)
-            return self.crop(img, vessels)
+            return img, vessels
         else:
             return self.crop(img) 
         
