@@ -88,13 +88,18 @@ class RandomFlip(object):
 
         if flip_vertical:
             img = img.transpose(Image.FLIP_TOP_BOTTOM)
-            vessels = vessels.transpose(Image.FLIP_TOP_BOTTOM)
+            if vessels is not None:
+                vessels = vessels.transpose(Image.FLIP_TOP_BOTTOM)
 
         if flip_horicontal:
             img = img.transpose(Image.FLIP_LEFT_RIGHT)
-            vessels = vessels.transpose(Image.FLIP_LEFT_RIGHT)
+            if vessels is not None:
+                vessels = vessels.transpose(Image.FLIP_LEFT_RIGHT)
 
-        return img, vessels
+        if vessels is not None:
+            return img, vessels
+        else:
+            return img
 
     def __repr__(self):
         return self.__class__.__name__ + '()'
