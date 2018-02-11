@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter, ImageFile
 import torch.utils.data as data
-from torchvision.transforms import Compose, RandomCrop, ToTensor, Resize, RandomHorizontalFlip, RandomVerticalFlip, Lambda, CenterCrop, Grayscale, ColorJitter
+from torchvision.transforms import Compose, RandomCrop, ToTensor, Resize, RandomHorizontalFlip, RandomVerticalFlip, Lambda, CenterCrop, Grayscale, ColorJitter, Normalize
 import torchvision.transforms.functional as F
 
 # See: https://github.com/keras-team/keras/issues/5475
@@ -175,6 +175,9 @@ class Dataset(data.Dataset):
         
         self.hr_transform = hr_transform
         self.lr_transforms = lr_transforms
+        self.to_tensor = ToTensor()
+        self.normalize = Normalize(mean=[0.485, 0.456, 0.406],
+                                   std=[0.229, 0.224, 0.225])
         self.verbose = verbose
         
         image_suffixes = ['jpg', 'jpeg', 'tif', 'ppm', 'png']        
@@ -211,8 +214,7 @@ class Dataset(data.Dataset):
         for transform in self.lr_transforms:
             imgs.append(transform(imgs[-1]))
         
-        to_tensor = ToTensor()
-        tensors = [to_tensor(i) for i in reversed(imgs)]
+        tensors = [self.normalize(self.to_tensor(i)) for i in reversed(imgs)]
         # lr, hr2, hr4, hr8 = ...
         # shape for crops of size 100: 12, 25, 50, 100
         return tensors
@@ -276,14 +278,11 @@ def get_lr_transform(crop_size, factor, random=True):
 class HrTransform(object):
     def __init__(self, crop_size, random=True):
         self.crop_size = crop_size
-        # Later, for perceptual loss needed!
-        #self.normalize = Normalize(mean=[0.485, 0.456, 0.406],
-        #                          std=[0.229, 0.224, 0.225])
         if random:
             self.random_scaling = RandomScaling(crop_size)
             self.random_rotation = RandomRotation()
             self.random_flip = RandomFlip()
-            self.color_jitter = ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.25)
+            #self.color_jitter = ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.25)
             self.crop = SmartRandomCrop(crop_size)
         else:
             self.crop = CenterCrop(crop_size)
@@ -296,7 +295,7 @@ class HrTransform(object):
             img = self.crop(img, vessels)
             img = self.random_rotation(img, None)
             img = self.random_flip(img, None)
-            img = self.color_jitter(img)
+            #img = self.color_jitter(img)
             return img
         else:
             return self.crop(img) 

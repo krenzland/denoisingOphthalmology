@@ -127,7 +127,7 @@ def main():
     optimizer = optim.SGD(model.parameters(), weight_decay=1e-4, lr=args.lr, momentum=0.9)
     optimizer = optim.Adam(model.parameters(), weight_decay=1e-4, lr=args.lr)
     criterion = CharbonnierLoss().cuda()
-    #criterion = make_vgg16_loss(criterion).cuda()
+    criterion = make_vgg16_loss(nn.MSELoss().cuda()).cuda()
 
     if args.checkpoint:
         checkpoint = torch.load(args.checkpoint)

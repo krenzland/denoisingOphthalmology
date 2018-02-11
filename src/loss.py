@@ -4,6 +4,7 @@ from collections import namedtuple
 import torch
 import torch.nn as nn
 from torchvision.models import vgg16, VGG
+from torchvision.transforms import Normalize
 
 class CharbonnierLoss(nn.Module):
     def __init__(self, eps=1e-6):
@@ -36,6 +37,10 @@ class LossNetwork(torch.nn.Module):
         # Drop all layers that are not needed from the model.
         last_layer = max([int(i) for i in self.layer_map])
         self.vgg_layers = nn.Sequential(*list(vgg.features)[:last_layer+1])
+
+        # Deactive gradient computation
+        for param in self.parameters():
+            param.requires_grad = False
         
     def forward(self, x):
         output = {}
@@ -50,17 +55,14 @@ class PerceptualLoss(nn.Module):
         super(PerceptualLoss, self).__init__()
         self.loss_network = loss_network
         self.criterion = criterion
-        
+ 
     def forward(self, x, y):
-        # x/y only have the y-channel, vgg expects RGB values.
-        # Just use y as r/g/b each.
         featX = self.loss_network(x)
         featY = self.loss_network(y)
         
         content_loss = 0.0
         for a, b in zip(featX, featY):
-            # normalize all activations to 1
-            content_loss += self.criterion(a/a.norm(), b/b.norm())
+            content_loss += self.criterion(a, b)
             
         return content_loss
 
