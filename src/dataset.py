@@ -297,7 +297,7 @@ class HrTransform(object):
             img = self.random_rotation(img, None)
             img = self.random_flip(img, None)
             img = self.color_jitter(img)
-            return img, vessels
+            return img
         else:
             return self.crop(img) 
         
