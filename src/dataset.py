@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter, ImageFile
 import torch.utils.data as data
-from torchvision.transforms import Compose, RandomCrop, ToTensor, Resize, RandomHorizontalFlip, RandomVerticalFlip, Lambda, CenterCrop, Grayscale
+from torchvision.transforms import Compose, RandomCrop, ToTensor, Resize, RandomHorizontalFlip, RandomVerticalFlip, Lambda, CenterCrop, Grayscale, ColorJitter
 import torchvision.transforms.functional as F
 
 # See: https://github.com/keras-team/keras/issues/5475
@@ -271,10 +271,14 @@ def get_lr_transform(crop_size, factor, random=True):
 class HrTransform(object):
     def __init__(self, crop_size, random=True):
         self.crop_size = crop_size
+        # Later, for perceptual loss needed!
+        #self.normalize = Normalize(mean=[0.485, 0.456, 0.406],
+        #                          std=[0.229, 0.224, 0.225])
         if random:
             self.random_scaling = RandomScaling(crop_size)
             self.random_rotation = RandomRotation()
             self.random_flip = RandomFlip()
+            self.color_jitter = ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.25)
             self.crop = SmartRandomCrop(crop_size)
         else:
             self.crop = CenterCrop(crop_size)
@@ -285,6 +289,7 @@ class HrTransform(object):
             img, vessels = self.random_scaling(img, vessels)
             img, vessels = self.random_rotation(img, vessels)
             img, vessels = self.random_flip(img, vessels)
+            img = self.color_jitter(img)
             return self.crop(img, vessels)
         else:
             return self.crop(img) 
