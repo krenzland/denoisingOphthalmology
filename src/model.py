@@ -51,6 +51,18 @@ class ResidualBlock(nn.Module):
         x = self.conv2(x)
 
         return residual + x
+
+class ResizeConvolution(nn.Module):
+    def __init__(self, num_channels=64):
+        super(ResizeConvolution, self).__init__()
+        self.resize = nn.Upsample(scale_factor=2, mode='nearest')
+        self.pad = nn.ReflectionPad2d(1)
+        self.convolution = nn.Conv2d(num_channels, num_channels, 3, stride=1, padding=0)
+    
+    def forward(self, x):
+        x = self.resize(x)
+        x = self.pad(x)
+        return self.convolution(x)
     
 class FeatureExtraction(nn.Module):
     def __init__(self, depth=3, residual=False):
@@ -64,11 +76,11 @@ class FeatureExtraction(nn.Module):
                 filters.add_module('conv{}'.format(i), ResidualBlock())
             else:
                 filters.add_module('conv{}'.format(i), nn.Conv2d(64, 64, 3, stride=1, padding=1))
+                #filters.add_module('norm{}'.format(i), nn.InstanceNorm2d(64))
                 filters.add_module('lrelu{}'.format(i), LReLu)
 
-        filters.add_module('convt_upsample', nn.ConvTranspose2d(64, 64, 4, stride=2, padding=1))
-        #filters.add_module('nn_upsample', nn.Upsample(scale_factor=2, mode='nearest'))
-        #filters.add_module('conv_upsample', nn.Conv2d(64, 64, 3, stride=1, padding=1))
+        #filters.add_module('convt_upsample', nn.ConvTranspose2d(64, 64, 4, stride=2, padding=1))
+        filters.add_module('resize_conv', ResizeConvolution(num_channels=64))
         filters.add_module('lrelu_upsample', LReLu)                   
         
         self.seq = filters
@@ -89,10 +101,8 @@ class ImageReconstruction(nn.Module):
     def __init__(self):
         super(ImageReconstruction, self).__init__()
         self.conv_residual = nn.Conv2d(64, 3, 3, stride=1, padding=1) # last filter -> res
-        self.upsample = nn.ConvTranspose2d(3, 3, 4, stride=2, padding=1)
-        #self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
-        #self.upsample = nn.Sequential(nn.Upsample(scale_factor=2, mode='nearest'),
-        #                            nn.Conv2d(3, 3, 3, stride=1, padding=1))
+        #self.upsample = nn.ConvTranspose2d(3, 3, 4, stride=2, padding=1)
+        self.upsample = ResizeConvolution(num_channels=3)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
