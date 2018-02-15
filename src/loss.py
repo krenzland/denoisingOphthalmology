@@ -20,20 +20,17 @@ class CharbonnierLoss(nn.Module):
         return torch.mean(e)
 
 # Specifies which layers we want to use for our loss
-LossOutput = namedtuple("ContentLoss", ['pool_1', 'pool_2'])
+LossOutput = namedtuple("ContentLoss", ['pool_1', 'pool_4'])
 
 # https://discuss.pytorch.org/t/how-to-extract-features-of-an-image-from-a-trained-model/119/3
 class LossNetwork(torch.nn.Module):
-    def __init__(self, vgg):
+    def __init__(self, vgg, layer_map):
         super(LossNetwork, self).__init__()
         # Vgg has to be the VGG16 model from torchvision.
         assert(isinstance(vgg, VGG) and len(vgg.features) == 31)
 
         # Maps layer-id -> layer_name
-        self.layer_map = {
-            '4': 'pool_1',
-            '9': 'pool_2'
-        }
+        self.layer_map = layer_map
         # Drop all layers that are not needed from the model.
         last_layer = max([int(i) for i in self.layer_map])
         self.vgg_layers = nn.Sequential(*list(vgg.features)[:last_layer+1])
@@ -47,30 +44,45 @@ class LossNetwork(torch.nn.Module):
         for name, module in self.vgg_layers._modules.items():
             x = module(x)
             if name in self.layer_map:
-                output[self.layer_map[name]] = x
+                layer_name = self.layer_map[name]
+                output[layer_name] = x
         return LossOutput(**output)
 
 class PerceptualLoss(nn.Module):
-    def __init__(self, criterion, loss_network):
+    def __init__(self, criterion, loss_network, weight_map):
         super(PerceptualLoss, self).__init__()
         self.loss_network = loss_network
         self.criterion = criterion
+        self.weight_map = weight_map
  
     def forward(self, x, y):
         featX = self.loss_network(x)
         featY = self.loss_network(y)
         
         content_loss = 0.0
-        for a, b in zip(featX, featY):
-            content_loss += self.criterion(a, b)
+        for layer_name in featX._asdict():
+            weight = self.weight_map[layer_name]
+            layer_loss = self.criterion(getattr(featX, layer_name), getattr(featY, layer_name))
+            content_loss += weight * layer_loss
             
         return content_loss
 
 def make_vgg16_loss(criterion):
+    # Key = number in sequential layer of vgg, value = (layer_name, weight)
+    layer_map = {
+        '4': 'pool_1',
+        # '9': 'pool_2'
+        '23': 'pool_4'
+    }
+    weight_map = {
+        'pool_1': 1.0,
+        'pool_2': 1.0,
+        'pool_4': 0.1
+    }
     vgg = vgg16(pretrained=True)
-    loss_network = LossNetwork(vgg).eval()
+    loss_network = LossNetwork(vgg, layer_map=layer_map).eval()
     del vgg
-    ploss = PerceptualLoss(criterion, loss_network)
+    ploss = PerceptualLoss(criterion, loss_network=loss_network, weight_map=weight_map)
     return ploss
 
 # Layers of VGG16:
