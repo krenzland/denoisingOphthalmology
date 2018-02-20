@@ -183,8 +183,9 @@ class PatchD(nn.Module):
             in_channels = num_channels if layer_idx == 0 else n_filters(layer_idx - 1)
             out_channels = n_filters(layer_idx)
             
-            conv = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=4, stride=2,
-                            padding=2)
+            stride = 1 if layer_idx == (num_layers - 1) else 2
+            conv = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=4, stride=stride,
+                            padding=1)
 
             # Paper used Batch-Norm.
             # Instance norm from "Instance Normalization - The Missing Ingredient for Fast Stylization",
@@ -205,7 +206,7 @@ class PatchD(nn.Module):
         # Map to 1D-Output.
         last_outsize = n_filters(num_layers - 1)
         layers += [
-            nn.Conv2d(in_channels=last_outsize, out_channels=2, kernel_size=4, stride=1, padding=1)
+            nn.Conv2d(in_channels=last_outsize, out_channels=1, kernel_size=4, stride=1, padding=1)
         ]
         
         if use_sigmoid:
