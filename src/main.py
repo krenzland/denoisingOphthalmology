@@ -55,7 +55,23 @@ def calc_gradient_penalty(critic, real_data, fake_data):
     grad = grad.view(grad.size(0), -1)
     grad_penalty = ((grad.norm(2, dim=1) - 1) ** 2).mean() * LAMBDA
     return grad_penalty
-    
+
+def compute_critic_loss(critic, hr4, hr4_hat):
+        # Train with real data (= hr4)
+        critic_real = critic(hr4).mean()
+
+        # Train with fake data (= hr4_hat)
+        critic_fake  = critic(hr4_hat).mean()
+
+        # Train with gradient penalty
+        gradient_penalty = calc_gradient_penalty(critic, 
+                                                 real_data=hr4.data,
+                                                 fake_data=hr4_hat.data)
+
+        wasserstein_distance = critic_real - critic_fake
+        critic_loss = -wasserstein_distance + gradient_penalty
+
+        return critic_loss
 
 def update_critic(generator, critic, optimizer_critic, lr, hr4):       
     NUM_CRITIC_ITERS = 5
@@ -72,19 +88,7 @@ def update_critic(generator, critic, optimizer_critic, lr, hr4):
     for _ in range(NUM_CRITIC_ITERS):
         critic.zero_grad()
 
-        # Train with real data (= hr4)
-        critic_real = critic(hr4).mean()
-
-        # Train with fake data (= hr4_hat)
-        critic_fake  = critic(hr4_hat).mean()
-
-        # Train with gradient penalty
-        gradient_penalty = calc_gradient_penalty(critic, 
-                                                 real_data=hr4.data,
-                                                 fake_data=hr4_hat.data)
-
-        wasserstein_distance = critic_real - critic_fake
-        critic_loss = -wasserstein_distance + gradient_penalty
+        critic_loss = compute_critic_loss(critic=critic, hr4=hr4, hr4_hat=hr4_hat)
         cum_critic_loss += critic_loss        
 
         critic_loss.backward()
@@ -161,34 +165,62 @@ def train(epoch, generator, discriminator, criterion, optimizer_generator, optim
         writer.add_scalar('data/neg_critic_loss', -cum_critic_loss, epoch)
         writer.add_scalar('data/adversarial_loss', cum_adversarial_loss, epoch)
  
-def validate(epoch, model, writer, validation_data):
-    cum_psnr2, cum_psnr4 = 0.0, 0.0
+def validate(epoch, generator, discriminator, criterion, writer, validation_data):
+    use_adversarial = discriminator is not None
+    
+    cum_psnr2, cum_psnr4, cum_hr2_loss, cum_hr4_loss = 0.0, 0.0, 0.0, 0.0
+    if use_adversarial:
+        cum_critic_loss = 0.0
     
     for batch in validation_data:
         lr, hr2, hr4 = [Variable(b).cuda(async=True) for b in batch]
-        hr2_hat, hr4_hat = model(lr)
+        hr2_hat, hr4_hat = generator(lr)
         
         mse = nn.MSELoss().cuda()
-        error_1 = mse(hr2_hat, hr2)
-        error_2 = mse(hr4_hat, hr4)
+        mse_1 = mse(hr2_hat, hr2)
+        mse_2 = mse(hr4_hat, hr4)
         
         get_psnr = lambda e: -10 * np.log10(e.data[0])
-        cum_psnr2 += get_psnr(error_1)
-        cum_psnr4 += get_psnr(error_2)
+        cum_psnr2 += get_psnr(mse_1)
+        cum_psnr4 += get_psnr(mse_2)
 
-    print("Avg. PSNR: {}, {}.".format(cum_psnr2/len(validation_data),cum_psnr4/len(validation_data)))
-    writer.add_scalar('data/validation_2', cum_psnr2/len(validation_data), epoch)
-    writer.add_scalar('data/validation_4', cum_psnr4/len(validation_data), epoch)
+        # Compute pixel-wise/perceptual loss for both output imgs.
+        loss_hr2 = criterion(hr2_hat, hr2)
+        loss_hr4 = criterion(hr4_hat, hr4)
+
+        cum_hr2_loss += loss_hr2.data[0]
+        cum_hr4_loss += loss_hr4.data[0]
+
+        if use_adversarial:
+            critic_loss = compute_critic_loss(critic=discriminator, hr4=hr4, hr4_hat=hr4_hat)
+            cum_critic_loss += critic_loss.data[0]
+
+
+    print("Validation Avg. PSNR: {}, {}, Validation Image Loss: {} {}.".format(
+        cum_psnr2/len(validation_data),
+        cum_psnr4/len(validation_data),
+        cum_hr2_loss,
+        cum_hr4_loss
+    ))
+
+    if use_adversarial:
+        print("Validation Neg. Critic Loss = {}".format(-cum_critic_loss))
+        writer.add_scalar('data/validation_neg_critic_loss', -cum_critic_loss, epoch)
+        
+    writer.add_scalar('data/validation_psnr_2', cum_psnr2/len(validation_data), epoch)
+    writer.add_scalar('data/validation_psnr_4', cum_psnr4/len(validation_data), epoch)
+    writer.add_scalar('data/validation_image_loss_2', cum_hr2_loss/len(validation_data), epoch)
+    writer.add_scalar('data/validation_image_loss_4', cum_hr4_loss/len(validation_data), epoch)
 
    # Upscale one image for testing:
     lr, _hr2, _hr4 = validation_data.dataset[np.random.randint(0, len(validation_data.dataset))]
-    out = model(Variable(lr).cuda().unsqueeze(0))
+    out = generator(Variable(lr).cuda().unsqueeze(0))
     for factor, img in enumerate(out):
         out = img.data.clone()
-        # Remove normalisation from image.
 
-        mean=[0.485, 0.456, 0.406]
-        std=[0.229, 0.224, 0.225]
+        # Remove normalisation from image.
+        mean= [0.485, 0.456, 0.406]
+        std= [0.229, 0.224, 0.225]
 
         # Undo input[channel] = (input[channel] - mean[channel]) / std[channel]
         for t, m, s in zip(out, mean, std):
@@ -302,7 +334,7 @@ def main():
 
         validate_every = 67 # epochs
         if (epoch % validate_every) == 0 or (epoch == args.num_epochs):
-            cum_psnr = validate(epoch, generator, writer, validation_data)
+            cum_psnr = validate(epoch, generator, discriminator, criterion, writer, validation_data)
 
         if (epoch % args.checkpoint_every) == 0 or (epoch == args.num_epochs):
             checkpoint_name = str(Path(args.checkpoint_dir) / 'srn_{}.pt'.format(epoch))
