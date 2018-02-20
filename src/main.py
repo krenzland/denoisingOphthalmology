@@ -156,14 +156,19 @@ def train(epoch, generator, discriminator, criterion, optimizer_generator, optim
         if ((it + 1)% (len(train_data)//10) == 0):
             print("Epoch={}, Batch={}/{}, Avg. loss = {}".format(epoch, it + 1, len(train_data),
                                                                  cum_loss/(it+1)))
-    print("Epoch={}, image loss={}, total Loss={}".format(epoch, cum_image_loss, cum_loss))
-    writer.add_scalar('data/image_loss', cum_image_loss, epoch)
-    writer.add_scalar('data/total_loss', cum_loss, epoch)
+    print("Epoch={}, image loss={}, total Loss={}".format(
+        epoch,
+        cum_image_loss/len(train_data),
+        cum_loss/len(train_data)))
+    writer.add_scalar('data/image_loss', cum_image_loss/len(train_data), epoch)
+    writer.add_scalar('data/total_loss', cum_loss, epoch/len(train_data))
 
     if use_adversarial:
-        print("Negative critic loss = {}, Adversarial loss={}".format(-cum_critic_loss, cum_adversarial_loss))
-        writer.add_scalar('data/neg_critic_loss', -cum_critic_loss, epoch)
-        writer.add_scalar('data/adversarial_loss', cum_adversarial_loss, epoch)
+        print("Negative critic loss = {}, Adversarial loss={}".format(
+            -cum_critic_loss/len(train_data),
+            cum_adversarial_loss/len(train_data)))
+        writer.add_scalar('data/neg_critic_loss', -cum_critic_loss/len(train_data), epoch)
+        writer.add_scalar('data/adversarial_loss', cum_adversarial_loss/len(train_data), epoch)
  
 def validate(epoch, generator, discriminator, criterion, writer, validation_data):
     use_adversarial = discriminator is not None
@@ -199,20 +204,20 @@ def validate(epoch, generator, discriminator, criterion, writer, validation_data
     print("Validation Avg. PSNR: {}, {}, Validation Image Loss: {} {}.".format(
         cum_psnr2/len(validation_data),
         cum_psnr4/len(validation_data),
-        cum_hr2_loss,
-        cum_hr4_loss
+        cum_hr2_loss/len(validation_data),
+        cum_hr4_loss/len(validation_data)
     ))
 
     if use_adversarial:
         print("Validation Neg. Critic Loss = {}".format(-cum_critic_loss))
-        writer.add_scalar('data/validation_neg_critic_loss', -cum_critic_loss, epoch)
+        writer.add_scalar('data/validation_neg_critic_loss', -cum_critic_loss/len(validation_data), epoch)
         
     writer.add_scalar('data/validation_psnr_2', cum_psnr2/len(validation_data), epoch)
     writer.add_scalar('data/validation_psnr_4', cum_psnr4/len(validation_data), epoch)
     writer.add_scalar('data/validation_image_loss_2', cum_hr2_loss/len(validation_data), epoch)
     writer.add_scalar('data/validation_image_loss_4', cum_hr4_loss/len(validation_data), epoch)
 
-   # Upscale one image for testing:
+    # Upscale one image for testing:
     lr, _hr2, _hr4 = validation_data.dataset[np.random.randint(0, len(validation_data.dataset))]
     out = generator(Variable(lr).cuda().unsqueeze(0))
     for factor, img in enumerate(out):
@@ -317,9 +322,9 @@ def main():
     dataset = Dataset(args.data_dir, hr_transform=hr_transform, lr_transforms=lr_transforms, verbose=True)
     train_dataset = SplitDataset(dataset, Split.TRAIN, 0.8) 
     validation_dataset = SplitDataset(dataset, Split.TEST, 0.8)
-    train_data = data.DataLoader(dataset=train_dataset, num_workers=2,\
+    train_data = data.DataLoader(dataset=train_dataset, num_workers=6,\
                                  batch_size=args.batch_size, shuffle=True, pin_memory=True)
-    validation_data = data.DataLoader(dataset=validation_dataset, num_workers=2,\
+    validation_data = data.DataLoader(dataset=validation_dataset, num_workers=6,\
                                       batch_size=args.batch_size, shuffle=True, pin_memory=True)
 
     # Initialise logging
