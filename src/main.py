@@ -286,6 +286,8 @@ def main():
     if args.adversarial:
         discriminator = PatchD(use_sigmoid=False, num_layers=4).cuda().train()
         print(discriminator)
+    else:
+        discriminator = None
 
     # Paper uses SGD with LR=1e-5
     if args.adversarial:
@@ -294,6 +296,7 @@ def main():
     else:
         optimizer_generator = optim.SGD(generator.parameters(), weight_decay=1e-4, lr=args.lr, momentum=0.9)
         optimizer_generator = optim.Adam(generator.parameters(), weight_decay=1e-4, lr=args.lr)
+        optimizer_disc = None
 
     if args.perceptual:
         criterion = make_vgg16_loss(nn.MSELoss().cuda()).cuda()
