@@ -9,6 +9,7 @@ from torch.autograd import Variable
 from torchvision.transforms import ToTensor, ToPILImage, Normalize, CenterCrop
 from PIL import Image, ImageFilter
 from skimage.filters import frangi, threshold_otsu
+from skimage import measure
 
 #from dataset import Dataset, Split, SplitDataset, get_lr_transform, get_hr_transform
 from model import LapSRN
@@ -139,6 +140,9 @@ def main():
             psnr_sr = psnr(hr4_gt, hr4_sr)
             psnr_bic = psnr(hr4_gt, hr4_bic)
 
+            ssim_sr = measure.compare_ssim(np.array(hr4_gt), np.array(hr4_sr), data_range=256, multichannel=True)
+            ssim_bic = measure.compare_ssim(np.array(hr4_gt), np.array(hr4_bic), data_range=256, multichannel=True)
+
             frangi_hr, frangi_sr, frangi_bic = [vessels(i, mask=mask).convert('YCbCr').split()[0] for i in [hr4_gt, hr4_sr, hr4_bic]]
 
             frangi_acc_sr, frangi_acc_bic = [acc(frangi_hr, other) for other in [frangi_sr, frangi_bic]]
@@ -146,9 +150,9 @@ def main():
 
 
             # TODO: Maybe add accuracy for completely black image as well, or use better measure!
-            rows += [[model_name, elapsed_time, psnr_sr, psnr_bic, frangi_acc_sr, frangi_acc_bic, segmentation_acc_hr, segmentation_acc_sr, segmentation_acc_bic]]
+            rows += [[model_name, elapsed_time, psnr_sr, psnr_bic, ssim_sr, ssim_bic, frangi_acc_sr, frangi_acc_bic, segmentation_acc_hr, segmentation_acc_sr, segmentation_acc_bic]]
 
-    columns = ['model_name', 'upscale_time', 'psnr_sr', 'psnr_bic', 'frangi_acc_sr', 'frangi_acc_bic', 'segmentation_acc_hr', 'segmentation_acc_sr', 'segmentation_acc_bic']
+    columns = ['model_name', 'upscale_time', 'psnr_sr', 'psnr_bic', 'ssim_sr', 'ssim_bic', 'frangi_acc_sr', 'frangi_acc_bic', 'segmentation_acc_hr', 'segmentation_acc_sr', 'segmentation_acc_bic']
     df = pd.DataFrame(data=rows, columns=columns)
     df.to_csv("results.csv", index=None)
  
