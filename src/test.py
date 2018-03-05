@@ -8,8 +8,9 @@ import torch
 from torch.autograd import Variable
 from torchvision.transforms import ToTensor, ToPILImage, Normalize, CenterCrop
 from PIL import Image, ImageFilter
-from skimage.filters import frangi, threshold_otsu
+from skimage.filters import frangi, threshold_otsu, sobel
 from skimage import measure
+from skimage.io._plugins.pil_plugin import pil_to_ndarray, ndarray_to_pil
 
 #from dataset import Dataset, Split, SplitDataset, get_lr_transform, get_hr_transform
 from model import LapSRN
@@ -67,7 +68,7 @@ def acc(y, y_hat, transform=lambda x:x):
 
 def mse(y, y_hat, transform=lambda x:x):
     y = np.array(transform(y))
-    y_hat = np.array((y_hat))
+    y_hat = np.array(transform(y_hat))
     
     diff = y_hat/255.0 - y/255.0
     return np.sum(diff**2)/diff.size    
@@ -76,6 +77,10 @@ def psnr(y, y_hat, transform=lambda x:x):
     error = mse(y, y_hat, transform)
     psnr = -10 * np.log10(error)
     return psnr
+
+def edges(img):
+    arr = pil_to_ndarray(img.convert('YCbCr').split()[0])
+    return ndarray_to_pil(sobel(arr))
 
 def vessels(img, mask=None):
     img = np.array(img.convert('YCbCr').split()[0]).astype(float)
@@ -124,7 +129,7 @@ def main():
             # Find next largest crop size that is divisible by four.
             crop_size = [int(np.ceil(s/4)*4) for s in img.size]
             lr_crop_size = [s//4 for s in (crop_size)]
-            blur_strength = 0  # TODO.
+            blur_strength = 0.0  # TODO.
 
             center_crop = CenterCrop(crop_size[::-1]) # pads s.t. img is div. by 4
             back_crop = CenterCrop(img.size[::-1]) # crop back to orig. img. size
@@ -137,11 +142,13 @@ def main():
             hr2_sr, hr4_sr = [back_crop(to_pil(out)) for out in sr_out]
             hr2_bic, hr4_bic = [back_crop(out) for out in upsample_bic(lr)]
 
-            psnr_sr = psnr(hr4_gt, hr4_sr)
-            psnr_bic = psnr(hr4_gt, hr4_bic)
+            psnr_sr = measure.compare_psnr(np.array(hr4_gt), np.array(hr4_sr))
+            psnr_bic = measure.compare_psnr(np.array(hr4_gt), np.array(hr4_bic))
 
             ssim_sr = measure.compare_ssim(np.array(hr4_gt), np.array(hr4_sr), data_range=256, multichannel=True)
             ssim_bic = measure.compare_ssim(np.array(hr4_gt), np.array(hr4_bic), data_range=256, multichannel=True)
+
+            sobel_sr, sobel_bic = [mse(hr4_gt, out, edges) * 10e4 for out in [hr4_sr, hr4_bic]]
 
             frangi_hr, frangi_sr, frangi_bic = [vessels(i, mask=mask).convert('YCbCr').split()[0] for i in [hr4_gt, hr4_sr, hr4_bic]]
 
@@ -150,9 +157,11 @@ def main():
 
 
             # TODO: Maybe add accuracy for completely black image as well, or use better measure!
-            rows += [[model_name, elapsed_time, psnr_sr, psnr_bic, ssim_sr, ssim_bic, frangi_acc_sr, frangi_acc_bic, segmentation_acc_hr, segmentation_acc_sr, segmentation_acc_bic]]
+            rows += [[model_name, elapsed_time, psnr_sr, psnr_bic, ssim_sr, ssim_bic, sobel_sr, sobel_bic, \
+                      frangi_acc_sr, frangi_acc_bic, segmentation_acc_hr, segmentation_acc_sr, segmentation_acc_bic]]
 
-    columns = ['model_name', 'upscale_time', 'psnr_sr', 'psnr_bic', 'ssim_sr', 'ssim_bic', 'frangi_acc_sr', 'frangi_acc_bic', 'segmentation_acc_hr', 'segmentation_acc_sr', 'segmentation_acc_bic']
+    columns = ['model_name', 'upscale_time', 'psnr_sr', 'psnr_bic', 'ssim_sr', 'ssim_bic', 'sobel_sr', 'sobel_bic', \
+               'frangi_acc_sr', 'frangi_acc_bic', 'segmentation_acc_hr', 'segmentation_acc_sr', 'segmentation_acc_bic']
     df = pd.DataFrame(data=rows, columns=columns)
     df.to_csv("results.csv", index=None)
  
