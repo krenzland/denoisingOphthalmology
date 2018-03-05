@@ -35,7 +35,7 @@ class LossNetwork(torch.nn.Module):
         last_layer = max([int(i) for i in self.layer_map])
         self.vgg_layers = nn.Sequential(*list(vgg.features)[:last_layer+1])
 
-        # Deactive gradient computation
+        # Deactivate gradient computation
         for param in self.parameters():
             param.requires_grad = False
         

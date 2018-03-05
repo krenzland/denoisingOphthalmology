@@ -16,6 +16,7 @@ from torchvision.transforms import Resize
 from model import LapSRN, PatchD
 from loss import CharbonnierLoss, make_vgg16_loss
 from dataset import Dataset, Split, SplitDataset, get_lr_transform, get_hr_transform
+from gan import GAN
 
 def save_checkpoint(epoch, generator, discriminator, optimizer_generator, optimizer_disc, filename, use_adversarial):
     state = {
@@ -29,94 +30,13 @@ def save_checkpoint(epoch, generator, discriminator, optimizer_generator, optimi
 
     torch.save(state, filename)
 
-def calc_gradient_penalty(critic, real_data, fake_data):
-    LAMBDA = 10 # standard value from paper
 
-    batch_size = real_data.size(0)
-    # One number between 0 and 1 for each pair (real, fake)
-    alpha = torch.rand(batch_size, 1).cuda()
-    alpha = alpha.expand(batch_size,real_data.nelement()// batch_size).contiguous().view(*real_data.shape
-    )
-    
-    # Linear interpolation between real and fake data with random weights
-    interpolate = alpha * real_data + ((1 - alpha) * fake_data)
-    interpolate = Variable(interpolate, requires_grad=True).cuda()
-    
-    critic_interpolate = critic(interpolate)
-    
-    ones = torch.ones(critic_interpolate.size()).cuda()    
-    
-    # Retain graph needed for higher derivatives
-    grad = autograd.grad(outputs=critic_interpolate, inputs=interpolate,
-                        grad_outputs=ones, create_graph=True, retain_graph=True,
-                        only_inputs=True)[0]
-    
-    # We want the gradient for each image of batch individually.
-    grad = grad.view(grad.size(0), -1)
-    grad_penalty = ((grad.norm(2, dim=1) - 1) ** 2).mean() * LAMBDA
-    return grad_penalty
-
-def compute_critic_loss(critic, hr4, hr4_hat):
-        # Train with real data (= hr4)
-        critic_real = critic(hr4).mean()
-
-        # Train with fake data (= hr4_hat)
-        critic_fake  = critic(hr4_hat).mean()
-
-        # Train with gradient penalty
-        gradient_penalty = calc_gradient_penalty(critic, 
-                                                 real_data=hr4.data,
-                                                 fake_data=hr4_hat.data)
-
-        wasserstein_distance = critic_real - critic_fake
-        critic_loss = -wasserstein_distance + gradient_penalty
-
-        return critic_loss
-
-def update_critic(generator, critic, optimizer_critic, lr, hr4):       
-    NUM_CRITIC_ITERS = 5
-    cum_critic_loss = 0.0
-    
-    # Freeze generator here
-    input_lr = Variable(lr.data, volatile=True)
-
-    # Compute fake data
-    _, hr4_hat = generator(input_lr)
-    # Remove volatile from output
-    hr4_hat = Variable(hr4_hat.data)    
-
-    for _ in range(NUM_CRITIC_ITERS):
-        critic.zero_grad()
-
-        critic_loss = compute_critic_loss(critic=critic, hr4=hr4, hr4_hat=hr4_hat)
-        cum_critic_loss += critic_loss        
-
-        critic_loss.backward()
-        optimizer_critic.step()
-    
-    return cum_critic_loss/NUM_CRITIC_ITERS
-    
-def get_adversarial_loss(critic, hr4_hat):
-    # Freeze weights of critic for efficiency
-    for p in critic.parameters():
-        p.requires_grad = False
-    
-    adversarial_loss = -critic(hr4_hat).mean()
-    
-    # Unfreeze weights of critic
-    for p in critic.parameters():
-        p.requires_grad = True
-        
-    return adversarial_loss
-
-
-def train(epoch, generator, discriminator, criterion, optimizer_generator, optimizer_disc, writer, train_data):
-    use_adversarial = discriminator is not None
+def train(epoch, generator, gan, criterion, optimizer_generator, writer, train_data):
+    use_adversarial = gan is not None
     
     cum_image_loss = 0.0
     cum_loss = 0.0
     if use_adversarial:
-        ADVERSARIAL_WEIGHT = 0.01
         cum_critic_loss = 0.0
         cum_adversarial_loss = 0.0
         
@@ -125,10 +45,9 @@ def train(epoch, generator, discriminator, criterion, optimizer_generator, optim
 
         if use_adversarial:
             # Update critic network
-            critic_loss = update_critic(generator=generator, critic=discriminator, 
-                                        optimizer_critic=optimizer_disc,
-                                        lr=lr,
-                                        hr4=hr4)           
+            critic_loss = gan.update(generator=generator,
+                                     lr=lr,
+                                     hr4=hr4)           
             cum_critic_loss += critic_loss.data[0]
 
         optimizer_generator.zero_grad()
@@ -139,14 +58,13 @@ def train(epoch, generator, discriminator, criterion, optimizer_generator, optim
         loss_hr4 = criterion(hr4_hat, hr4)
 
         if use_adversarial:
-            adversarial_loss = ADVERSARIAL_WEIGHT * get_adversarial_loss(discriminator, hr4_hat)
+            adversarial_loss = gan.get_generator_loss(hr4_hat=hr4_hat)
             cum_adversarial_loss += adversarial_loss.data[0]
         else:
             adversarial_loss = 0.0
         image_loss = loss_hr2 + loss_hr4
         cum_image_loss += image_loss.data[0]
 
-        #loss = image_loss + adversarial_loss
         loss = image_loss + adversarial_loss
         cum_loss += loss.data[0]
         
@@ -170,8 +88,8 @@ def train(epoch, generator, discriminator, criterion, optimizer_generator, optim
         writer.add_scalar('data/neg_critic_loss', -cum_critic_loss/len(train_data), epoch)
         writer.add_scalar('data/adversarial_loss', cum_adversarial_loss/len(train_data), epoch)
  
-def validate(epoch, generator, discriminator, criterion, writer, validation_data):
-    use_adversarial = discriminator is not None
+def validate(epoch, generator, gan, criterion, writer, validation_data):
+    use_adversarial = gan is not None
     
     cum_psnr2, cum_psnr4, cum_hr2_loss, cum_hr4_loss = 0.0, 0.0, 0.0, 0.0
     if use_adversarial:
@@ -197,7 +115,7 @@ def validate(epoch, generator, discriminator, criterion, writer, validation_data
         cum_hr4_loss += loss_hr4.data[0]
 
         if use_adversarial:
-            critic_loss = compute_critic_loss(critic=discriminator, hr4=hr4, hr4_hat=hr4_hat)
+            critic_loss = gan.get_discriminator_loss(hr4=hr4, hr4_hat=hr4_hat)
             cum_critic_loss += critic_loss.data[0]
 
 
@@ -257,6 +175,10 @@ def main():
                         help="If true, use perceptual loss.")
     parser.add_argument('--adversarial', action='store_true',
                         help="If true, use adversarial loss.")
+    parser.add_argument('--wgan', action='store_true', dest='use_wgan',
+                        help="If true, use wgan-gp instead of standard GAN.")
+    parser.add_argument('--adversarial-weight', type=int, default=1.0,
+                         help="Sets weight of adversarial loss. Default: 1.0")
     # Directories
     parser.add_argument('--data-dir', default='../data/processed/messidor',
                         help="Sets tensorboard run directory, default ../data/processed/messidor")
@@ -281,34 +203,56 @@ def main():
     np.random.seed(seed)
     print("Using seed={}.".format(seed))
     
+    # Set up networks
     generator = LapSRN(depth=args.depth).cuda().train()
     print(generator)
     if args.adversarial:
-        discriminator = PatchD(use_sigmoid=False, num_layers=4).cuda().train()
+        if args.use_wgan:
+            discriminator = PatchD(use_sigmoid=False, num_layers=4).cuda().train()
+        else:
+           discriminator = PatchD(use_sigmoid=True, num_layers=4).cuda().train() 
         print(discriminator)
     else:
+        assert(not args.use_wgan)
         discriminator = None
 
-    # Paper uses SGD with LR=1e-5
+    # Setup optimizers
     if args.adversarial:
-        optimizer_generator = optim.Adam(generator.parameters(), betas=(0.0, 0.9), lr=args.lr)
-        optimizer_disc = optim.Adam(discriminator.parameters(), betas=(0.0, 0.9), lr=args.lr)
+        if args.use_wgan:
+            optimizer_generator = optim.Adam(generator.parameters(), betas=(0.0, 0.9), lr=args.lr)
+            optimizer_discriminator = optim.Adam(discriminator.parameters(), betas=(0.0, 0.9), lr=args.lr)
+        else:
+            optimizer_generator = optim.Adam(generator.parameters(), weight_decay=1e-4, lr=args.lr)
+            optimizer_discriminator = optim.Adam(generator.parameters(), weight_decay=1e-4, lr=args.lr)
     else:
+        # Paper uses SGD with LR=1e-5
         optimizer_generator = optim.SGD(generator.parameters(), weight_decay=1e-4, lr=args.lr, momentum=0.9)
         optimizer_generator = optim.Adam(generator.parameters(), weight_decay=1e-4, lr=args.lr)
-        optimizer_disc = None
+        optimizer_discriminator = None
 
+    # Set up losses
     if args.perceptual:
         criterion = make_vgg16_loss(nn.MSELoss().cuda()).cuda()
     else:
         criterion = CharbonnierLoss().cuda()
+    if args.adversarial:
+        gan = GAN(discriminator=discriminator,
+                  optimizer=optimizer_discriminator,
+                  adversarial_weight=args.adversarial_weight,
+                  use_wgan=args.use_wgan)
+    else:
+        gan = None
 
+    # Load from checkpoint.
     if args.checkpoint:
         checkpoint = torch.load(args.checkpoint)
         generator.load_state_dict(checkpoint['model_state'])
         optimizer_generator.load_state_dict(checkpoint['optim_state'])
         if args.adversarial:
-            optimizer_disc.load_state_dict(checkpoint['optim_state_optimizer'])
+            if 'optim_state_optimizer' in checkpoint:
+                optimizer_discriminator.load_state_dict(checkpoint['optim_state_optimizer'])
+            else:
+                print("Warning: Only loading generator from checkpoint!")
         start_epoch = checkpoint['epoch']
         print("Model succesfully loaded from checkpoint")
     else:
@@ -338,16 +282,16 @@ def main():
         scheduler.step()
         print('Learning rate is {:.7E}'.format(optimizer_generator.param_groups[0]['lr']))
         writer.add_scalar('hyper/lr', optimizer_generator.param_groups[0]['lr'], epoch)
-        train(epoch, generator, discriminator, criterion, optimizer_generator, optimizer_disc, writer, train_data)
+        train(epoch, generator, gan, criterion, optimizer_generator, writer, train_data)
 
         validate_every = 67 # epochs
         if (epoch % validate_every) == 0 or (epoch == args.num_epochs):
-            cum_psnr = validate(epoch, generator, discriminator, criterion, writer, validation_data)
+            cum_psnr = validate(epoch, generator, gan, criterion, writer, validation_data)
 
         if (epoch % args.checkpoint_every) == 0 or (epoch == args.num_epochs):
             checkpoint_name = str(Path(args.checkpoint_dir) / 'srn_{}.pt'.format(epoch))
             print("Wrote checkpoint {}!".format(checkpoint_name))
-            save_checkpoint(epoch, generator, discriminator, optimizer_generator, optimizer_disc, checkpoint_name, args.adversarial)
+            save_checkpoint(epoch, generator, discriminator, optimizer_generator, optimizer_discriminator, checkpoint_name, args.adversarial)
 
 if __name__ == '__main__':
     main()
