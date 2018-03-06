@@ -71,8 +71,8 @@ def make_vgg16_loss(criterion):
     # Key = number in sequential layer of vgg, value = (layer_name, weight)
     layer_map = {
         '4': 'pool_1',
-        # '9': 'pool_2'
-        '23': 'pool_4'
+        '9': 'pool_2'
+        #'23': 'pool_4'
     }
     weight_map = {
         'pool_1': 1.0,

@@ -177,7 +177,7 @@ def main():
                         help="If true, use adversarial loss.")
     parser.add_argument('--wgan', action='store_true', dest='use_wgan',
                         help="If true, use wgan-gp instead of standard GAN.")
-    parser.add_argument('--adversarial-weight', type=int, default=1.0,
+    parser.add_argument('--adversarial-weight', type=float, default=1.0,
                          help="Sets weight of adversarial loss. Default: 1.0")
     # Directories
     parser.add_argument('--data-dir', default='../data/processed/messidor',
@@ -248,17 +248,23 @@ def main():
         checkpoint = torch.load(args.checkpoint)
         generator.load_state_dict(checkpoint['model_state'])
         optimizer_generator.load_state_dict(checkpoint['optim_state'])
+        start_epoch = checkpoint['epoch']
         if args.adversarial:
             if 'optim_state_optimizer' in checkpoint:
                 optimizer_discriminator.load_state_dict(checkpoint['optim_state_optimizer'])
             else:
                 print("Warning: Only loading generator from checkpoint!")
-        start_epoch = checkpoint['epoch']
+                print("Resetting epoch to 0 and learning rates to --lr argument.")
+                start_epoch = 0
+                for param_group in optimizer_generator.param_groups:
+                    param_group['lr'] = args.lr
+                
         print("Model succesfully loaded from checkpoint")
     else:
         start_epoch = 0
 
-    scheduler = lr_scheduler.StepLR(optimizer_generator, step_size=3334, gamma=0.5, last_epoch = start_epoch - 1) # See paper
+    scheduler_generator = lr_scheduler.StepLR(optimizer_generator, step_size=3334, gamma=0.5, last_epoch = start_epoch - 1) # See LapSRN paper
+    scheduler_discriminator = lr_scheduler.StepLR(optimizer_generator, step_size=3334, gamma=0.5, last_epoch = start_epoch - 1)
 
     # Set needed data transformations.
     CROP_SIZE = 128 # is 128 in paper
@@ -279,7 +285,8 @@ def main():
 
     for epoch in range(start_epoch, args.num_epochs+1):
         print("Started epoch num={}.".format(epoch))
-        scheduler.step()
+        scheduler_generator.step()
+        scheduler_discriminator.step()
         print('Learning rate is {:.7E}'.format(optimizer_generator.param_groups[0]['lr']))
         writer.add_scalar('hyper/lr', optimizer_generator.param_groups[0]['lr'], epoch)
         train(epoch, generator, gan, criterion, optimizer_generator, writer, train_data)
