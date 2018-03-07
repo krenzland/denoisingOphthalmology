@@ -20,7 +20,7 @@ class CharbonnierLoss(nn.Module):
         return torch.mean(e)
 
 # Specifies which layers we want to use for our loss
-LossOutput = namedtuple("ContentLoss", ['pool_1', 'pool_4'])
+LossOutput = namedtuple("ContentLoss", ['pool_1', 'pool_2'])
 
 # https://discuss.pytorch.org/t/how-to-extract-features-of-an-image-from-a-trained-model/119/3
 class LossNetwork(torch.nn.Module):
