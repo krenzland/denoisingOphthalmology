@@ -62,7 +62,10 @@ class PerceptualLoss(nn.Module):
         content_loss = 0.0
         for layer_name in featX._asdict():
             weight = self.weight_map[layer_name]
-            layer_loss = self.criterion(getattr(featX, layer_name), getattr(featY, layer_name))
+            actX = getattr(featX, layer_name) 
+            actY = getattr(featY, layer_name)
+            # normalize all activations to 1
+            layer_loss = self.criterion(actX/actX.norm(), actY/actY.norm())
             content_loss += weight * layer_loss
             
         return content_loss
