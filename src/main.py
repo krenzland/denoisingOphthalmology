@@ -223,7 +223,7 @@ def main():
             optimizer_discriminator = optim.Adam(discriminator.parameters(), betas=(0.0, 0.9), lr=args.lr)
         else:
             optimizer_generator = optim.Adam(generator.parameters(), weight_decay=1e-4, lr=args.lr)
-            optimizer_discriminator = optim.Adam(generator.parameters(), weight_decay=1e-4, lr=args.lr)
+            optimizer_discriminator = optim.Adam(discriminator.parameters(), weight_decay=1e-4, lr=args.lr)
     else:
         # Paper uses SGD with LR=1e-5
         optimizer_generator = optim.SGD(generator.parameters(), weight_decay=1e-4, lr=args.lr, momentum=0.9)
@@ -291,7 +291,7 @@ def main():
         writer.add_scalar('hyper/lr', optimizer_generator.param_groups[0]['lr'], epoch)
         train(epoch, generator, gan, criterion, optimizer_generator, writer, train_data)
 
-        validate_every = 67 # epochs
+        validate_every = 1# 67 # epochs
         if (epoch % validate_every) == 0 or (epoch == args.num_epochs):
             cum_psnr = validate(epoch, generator, gan, criterion, writer, validation_data)
 
