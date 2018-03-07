@@ -64,8 +64,10 @@ class PerceptualLoss(nn.Module):
             weight = self.weight_map[layer_name]
             actX = getattr(featX, layer_name) 
             actY = getattr(featY, layer_name)
-            # normalize all activations to 1
-            layer_loss = self.criterion(actX/actX.norm(), actY/actY.norm())
+            # normalize all activations to mean 1
+            actX = (actX - actX.mean()) + 1.0
+            actY = (actY - actY.mean()) + 1.0
+            layer_loss = self.criterion(actX, actY)
             content_loss += weight * layer_loss
             
         return content_loss
