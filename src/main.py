@@ -41,28 +41,28 @@ def train(epoch, generator, gan, criterion, optimizer_generator, writer, train_d
         cum_adversarial_loss = 0.0
         
     for it, batch in enumerate(train_data):
-        lr, hr2, hr4 = [Variable(b).cuda(async=True) for b in batch]        
+        lr, *ground_truth = [Variable(b).cuda(async=True) for b in batch]        
 
         if use_adversarial:
             # Update critic network
             critic_loss = gan.update(generator=generator,
                                      lr=lr,
-                                     hr4=hr4)           
+                                     hr4=ground_truth[-1])           
             cum_critic_loss += critic_loss.data[0]
 
         optimizer_generator.zero_grad()
-        hr2_hat, hr4_hat = generator(lr)
+        out = generator(lr)
         
         # Compute pixel-wise/perceptual loss for both output imgs.
-        loss_hr2 = criterion(hr2_hat, hr2)
-        loss_hr4 = criterion(hr4_hat, hr4)
+        loss_hr = [criterion(a, b) for (a,b) in zip(out, ground_truth)]
 
         if use_adversarial:
-            adversarial_loss = gan.get_generator_loss(hr4_hat=hr4_hat)
+            adversarial_loss = gan.get_generator_loss(hr4_hat=out[-1])
             cum_adversarial_loss += adversarial_loss.data[0]
         else:
             adversarial_loss = 0.0
-        image_loss = loss_hr2 + loss_hr4
+        # TODO: Generalise
+        image_loss = loss_hr[0] + loss_hr[1]
         cum_image_loss += image_loss.data[0]
 
         loss = image_loss + adversarial_loss
@@ -91,52 +91,52 @@ def train(epoch, generator, gan, criterion, optimizer_generator, writer, train_d
 def validate(epoch, generator, gan, criterion, writer, validation_data):
     use_adversarial = gan is not None
     
-    cum_psnr2, cum_psnr4, cum_hr2_loss, cum_hr4_loss = 0.0, 0.0, 0.0, 0.0
+    cum_psnr = np.array([0.0, 0.0])
+    cum_hr_loss = np.array([0.0, 0.0])
+
     if use_adversarial:
         cum_critic_loss = 0.0
     
     for batch in validation_data:
-        lr, hr2, hr4 = [Variable(b).cuda(async=True) for b in batch]
-        hr2_hat, hr4_hat = generator(lr)
+        # Need no gradient here!
+        lr, *ground_truth = [Variable(b, volatile=True).cuda(async=True) for b in batch]
+        out = generator(lr)
         
         mse = nn.MSELoss().cuda()
-        mse_1 = mse(hr2_hat, hr2)
-        mse_2 = mse(hr4_hat, hr4)
+
+        mse_loss = np.array([mse(a, b).data[0] for (a,b) in zip(ground_truth, out)])
         
         get_psnr = lambda e: -10 * np.log10(e.data[0])
-        cum_psnr2 += get_psnr(mse_1)
-        cum_psnr4 += get_psnr(mse_2)
+        cum_psnr += get_psnr(mse_loss)
 
         # Compute pixel-wise/perceptual loss for both output imgs.
-        loss_hr2 = criterion(hr2_hat, hr2)
-        loss_hr4 = criterion(hr4_hat, hr4)
-
-        cum_hr2_loss += loss_hr2.data[0]
-        cum_hr4_loss += loss_hr4.data[0]
+        cum_hr_loss += np.array([criterion(a,b).data[0] for (a,b) in zip(ground_truth, out)])
 
         if use_adversarial:
-            critic_loss = gan.get_discriminator_loss(hr4=hr4, hr4_hat=hr4_hat)
+            critic_loss = gan.get_discriminator_loss(hr4=ground_truth[-1], hr4_hat=out[-1])
             cum_critic_loss += critic_loss.data[0]
 
 
+    # TODO: Generalise
     print("Validation Avg. PSNR: {}, {}, Validation Image Loss: {} {}.".format(
-        cum_psnr2/len(validation_data),
-        cum_psnr4/len(validation_data),
-        cum_hr2_loss/len(validation_data),
-        cum_hr4_loss/len(validation_data)
+        cum_psnr[0]/len(validation_data),
+        cum_psnr[1]/len(validation_data),
+        cum_hr_loss[0]/len(validation_data),
+        cum_hr_loss[1]/len(validation_data)
     ))
 
     if use_adversarial:
         print("Validation Neg. Critic Loss = {}".format(-cum_critic_loss))
         writer.add_scalar('data/validation_neg_critic_loss', -cum_critic_loss/len(validation_data), epoch)
         
-    writer.add_scalar('data/validation_psnr_2', cum_psnr2/len(validation_data), epoch)
-    writer.add_scalar('data/validation_psnr_4', cum_psnr4/len(validation_data), epoch)
-    writer.add_scalar('data/validation_image_loss_2', cum_hr2_loss/len(validation_data), epoch)
-    writer.add_scalar('data/validation_image_loss_4', cum_hr4_loss/len(validation_data), epoch)
+    # TODO: Generalise
+    writer.add_scalar('data/validation_psnr_2', cum_psnr[0]/len(validation_data), epoch)
+    writer.add_scalar('data/validation_psnr_4', cum_psnr[1]/len(validation_data), epoch)
+    writer.add_scalar('data/validation_image_loss_2', cum_hr_loss[0]/len(validation_data), epoch)
+    writer.add_scalar('data/validation_image_loss_4', cum_hr_loss[1]/len(validation_data), epoch)
 
     # Upscale one image for testing:
-    lr, _hr2, _hr4 = validation_data.dataset[np.random.randint(0, len(validation_data.dataset))]
+    lr, *ground_truth = validation_data.dataset[np.random.randint(0, len(validation_data.dataset))]
     out = generator(Variable(lr).cuda().unsqueeze(0))
     for factor, img in enumerate(out):
         out = img.data.clone()
@@ -152,7 +152,7 @@ def validate(epoch, generator, gan, criterion, writer, validation_data):
         upscaled = out.cpu().clamp(0,1)
         writer.add_image('images/sr_{}'.format(2**(factor+1)), upscaled, epoch)
 
-    return cum_psnr2 + cum_psnr4
+    return cum_psnr.sum()
 
 def main():
     # Currently only support CUDA, not CPU backend..
