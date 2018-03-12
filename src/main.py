@@ -106,8 +106,8 @@ def validate(epoch, generator, gan, criterion, writer, validation_data):
 
         mse_loss = np.array([mse(a, b).data[0] for (a,b) in zip(ground_truth, out)])
         
-        get_psnr = lambda e: -10 * np.log10(e.data[0])
-        cum_psnr += get_psnr(mse_loss)
+        get_psnr = lambda e: -10 * np.log10(e)
+        cum_psnr += np.array([get_psnr(m) for m in mse_loss])
 
         # Compute pixel-wise/perceptual loss for both output imgs.
         cum_hr_loss += np.array([criterion(a,b).data[0] for (a,b) in zip(ground_truth, out)])
