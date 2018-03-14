@@ -14,7 +14,7 @@ from PIL import Image
 from torchvision.transforms import Resize
 
 from model import LapSRN, PatchD
-from loss import CharbonnierLoss, make_vgg16_loss
+from loss import CharbonnierLoss, CombinedLoss, SaliencyLoss, make_vgg16_loss
 from dataset import Dataset, Split, SplitDataset, get_lr_transform, get_hr_transform
 from gan import GAN
 
@@ -41,7 +41,10 @@ def train(epoch, generator, gan, criterion, optimizer_generator, writer, train_d
         cum_adversarial_loss = 0.0
         
     for it, batch in enumerate(train_data):
-        lr, *ground_truth = [Variable(b).cuda(async=True) for b in batch]        
+        # TODO: Only if using saliency loss.
+        imgs, saliencies = batch
+        lr, *ground_truth = [Variable(b).cuda(async=True) for b in imgs]
+        saliencies = [Variable(s).cuda(async=True) for s in saliencies]
 
         if use_adversarial:
             # Update critic network
@@ -54,7 +57,7 @@ def train(epoch, generator, gan, criterion, optimizer_generator, writer, train_d
         out = generator(lr)
         
         # Compute pixel-wise/perceptual loss for both output imgs.
-        loss_hr = [criterion(a, b) for (a,b) in zip(out, ground_truth)]
+        loss_hr = [criterion(a, b, saliency) for (a,b, saliency) in zip(out, ground_truth, saliencies)]
 
         if use_adversarial:
             adversarial_loss = gan.get_generator_loss(hr4_hat=out[-1])
@@ -99,7 +102,11 @@ def validate(epoch, generator, gan, criterion, writer, validation_data):
     
     for batch in validation_data:
         # Need no gradient here!
-        lr, *ground_truth = [Variable(b, volatile=True).cuda(async=True) for b in batch]
+        # TODO: Only if saliency!
+        imgs, saliencies = batch
+        lr, *ground_truth = [Variable(b, volatile=True).cuda(async=True) for b in imgs]
+        saliencies = [Variable(s, volatile=True).cuda(async=True) for s in saliencies]
+
         out = generator(lr)
         
         mse = nn.MSELoss().cuda()
@@ -110,7 +117,7 @@ def validate(epoch, generator, gan, criterion, writer, validation_data):
         cum_psnr += np.array([get_psnr(m) for m in mse_loss])
 
         # Compute pixel-wise/perceptual loss for both output imgs.
-        cum_hr_loss += np.array([criterion(a,b).data[0] for (a,b) in zip(ground_truth, out)])
+        cum_hr_loss += np.array([criterion(a,b, saliency).data[0] for (a,b, saliency) in zip(ground_truth, out, saliencies)])
 
         if use_adversarial:
             critic_loss = gan.get_discriminator_loss(hr4=ground_truth[-1], hr4_hat=out[-1])
@@ -136,8 +143,9 @@ def validate(epoch, generator, gan, criterion, writer, validation_data):
     writer.add_scalar('data/validation_image_loss_4', cum_hr_loss[1]/len(validation_data), epoch)
 
     # Upscale one image for testing:
-    lr, *ground_truth = validation_data.dataset[np.random.randint(0, len(validation_data.dataset))]
-    out = generator(Variable(lr).cuda().unsqueeze(0))
+    imgs, _  = validation_data.dataset[np.random.randint(0, len(validation_data.dataset))]
+    lr, *_ = imgs
+    out = generator(Variable(lr, volatile=True).cuda().unsqueeze(0))
     for factor, img in enumerate(out):
         out = img.data.clone()
 
@@ -222,12 +230,12 @@ def main():
             optimizer_generator = optim.Adam(generator.parameters(), betas=(0.0, 0.9), lr=args.lr)
             optimizer_discriminator = optim.Adam(discriminator.parameters(), betas=(0.0, 0.9), lr=args.lr)
         else:
-            optimizer_generator = optim.Adam(generator.parameters(), weight_decay=1e-4, lr=args.lr)
-            optimizer_discriminator = optim.Adam(discriminator.parameters(), weight_decay=1e-4, lr=args.lr)
+            optimizer_generator = optim.Adam(generator.parameters(), weight_decay=0.0, lr=args.lr)
+            optimizer_discriminator = optim.Adam(discriminator.parameters(), weight_decay=0.0, lr=args.lr)
     else:
         # Paper uses SGD with LR=1e-5
         optimizer_generator = optim.SGD(generator.parameters(), weight_decay=1e-4, lr=args.lr, momentum=0.9)
-        optimizer_generator = optim.Adam(generator.parameters(), weight_decay=1e-4, lr=args.lr)
+        optimizer_generator = optim.Adam(generator.parameters(), weight_decay=0.0, lr=args.lr)
         optimizer_discriminator = None
 
     # Set up losses
@@ -235,6 +243,10 @@ def main():
         criterion = make_vgg16_loss(nn.MSELoss().cuda()).cuda()
     else:
         criterion = CharbonnierLoss().cuda()
+
+    sal_loss = SaliencyLoss().cuda()
+    criterion = CombinedLoss([criterion, sal_loss]).cuda()
+
     if args.adversarial:
         gan = GAN(discriminator=discriminator,
                   optimizer=optimizer_discriminator,
@@ -263,8 +275,8 @@ def main():
     else:
         start_epoch = 0
 
-    scheduler_generator = lr_scheduler.StepLR(optimizer_generator, step_size=3334, gamma=0.5, last_epoch = start_epoch - 1) # See LapSRN paper
-    scheduler_discriminator = lr_scheduler.StepLR(optimizer_generator, step_size=3334, gamma=0.5, last_epoch = start_epoch - 1)
+    scheduler_generator = lr_scheduler.StepLR(optimizer_generator, step_size=6666, gamma=0.1, last_epoch = start_epoch - 1) # See LapSRN paper
+    scheduler_discriminator = lr_scheduler.StepLR(optimizer_generator, step_size=6666, gamma=0.1, last_epoch = start_epoch - 1)
 
     # Set needed data transformations.
     CROP_SIZE = 128 # is 128 in paper

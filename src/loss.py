@@ -11,13 +11,41 @@ class CharbonnierLoss(nn.Module):
         """
         Eps is a relaxation parameter, the paper sets it to 1e-3.
         """
-        super(CharbonnierLoss, self).__init__()
+        super().__init__()
         self.eps = eps
         
     def forward(self, x, y):
         d = torch.add(x, -y)
         e = torch.sqrt(d**2 + self.eps)
         return torch.mean(e)
+
+class SaliencyLoss(nn.Module):
+    def __init__(self, eps=1e-6):
+        """
+        Eps is a relaxation parameter, the paper sets it to 1e-3.
+        """
+        super().__init__()
+        self.eps = eps
+        
+    def forward(self, x, y, saliency_map):
+        d = torch.add(x, -y)
+        e = torch.sqrt(d**2 + self.eps)
+        e = saliency_map * e # weigh by saliency map
+        return torch.mean(e)
+
+class CombinedLoss(nn.Module):
+    def __init__(self, criterions):
+        super().__init__()
+        self.criterions = criterions
+
+    def forward(self, x, y, saliencies=True):
+        total = 0.0
+        for crit in self.criterions:
+            if isinstance(crit, SaliencyLoss):
+                total += 10 * crit(x,y, saliencies) # TODO: Set weight!
+            else:
+                total += crit(x,y)
+        return total
 
 # Specifies which layers we want to use for our loss
 LossOutput = namedtuple("ContentLoss", ['pool_1', 'pool_2'])
