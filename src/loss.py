@@ -42,7 +42,7 @@ class CombinedLoss(nn.Module):
         total = 0.0
         for crit in self.criterions:
             if isinstance(crit, SaliencyLoss):
-                total += 10 * crit(x,y, saliencies) # TODO: Set weight!
+                total += 100 * crit(x,y, saliencies) # TODO: Set weight!
             else:
                 total += crit(x,y)
         return total

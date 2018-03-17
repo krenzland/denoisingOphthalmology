@@ -71,7 +71,7 @@ class GAN(object):
         input_lr = Variable(lr.data, volatile=True)
 
         # Compute fake data
-        _, hr4_hat = generator(input_lr)
+        hr4_hat = generator(input_lr)[-1]
         # Remove volatile from output
         hr4_hat = Variable(hr4_hat.data)    
 

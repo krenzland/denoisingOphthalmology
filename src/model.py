@@ -54,7 +54,7 @@ class ResidualBlock(nn.Module):
 
 class ResizeConvolution(nn.Module):
     def __init__(self, num_channels=64):
-        super(ResizeConvolution, self).__init__()
+        super().__init__()
         self.resize = nn.Upsample(scale_factor=2, mode='nearest')
         self.pad = nn.ReflectionPad2d(1)
         self.convolution = nn.Conv2d(num_channels, num_channels, 3, stride=1, padding=0)
@@ -66,7 +66,7 @@ class ResizeConvolution(nn.Module):
     
 class FeatureExtraction(nn.Module):
     def __init__(self, depth=3, residual=False):
-        super(FeatureExtraction, self).__init__()
+        super().__init__()
         
         LReLu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
         filters = nn.Sequential()
@@ -153,6 +153,38 @@ class LapSRN(nn.Module):
         hr4 = self.image_reconstruction1(hr2, features1) 
       
         return hr2, hr4
+    
+class DeblurNet(nn.Module):
+    def __init__(self, depth):
+        super().__init__()
+        
+        lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
+        in_conv = nn.Conv2d(in_channels=3, out_channels=64, kernel_size=3, padding=1)
+        
+        self.seq = nn.Sequential(in_conv, lrelu)
+        
+        for d in range(depth):
+            self.seq.add_module('conv{}'.format(d),
+                                nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1))
+            self.seq.add_module('lrelu{}'.format(d),
+                                nn.LeakyReLU(negative_slope=0.2, inplace=True))
+        
+        out_conv = nn.Conv2d(in_channels=64, out_channels=3, kernel_size=3, padding=1)
+        self.seq.add_module('out_conv', out_conv)
+        
+        self.seq = nn.Sequential(*self.seq)
+        
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                init.xavier_normal(m.weight)
+                m.bias.data.fill_(0.0)
+            if isinstance(m, nn.ConvTranspose2d):
+                m.weight.data.copy_(bilinear_upsample_matrix(4, m.weight.data))
+
+    def forward(self, x):
+        out = self.seq(x)
+        # return list so that we are compatible with LapSRN interface!
+        return [out + x]
 
 
 class PatchD(nn.Module):

@@ -334,7 +334,7 @@ def get_lr_transform(crop_size, factor, random=True):
     else:
         return Resize(crop_size//factor, interpolation=Image.BICUBIC) 
 
-def get_blur_transform(crop_size, blur=1.5, random=True):
-    assert(blur > 0.0)
-    blur_func = lambda img: img.filter(ImageFilter.GaussianBlur(blur * np.random.uniform(0, blur)))
+def get_blur_transform(max_blur=1.5, random=True):
+    assert(max_blur > 0.0)
+    blur_func = lambda img: img.filter(ImageFilter.GaussianBlur(np.random.uniform(0, max_blur)))
     return Lambda(blur_func)

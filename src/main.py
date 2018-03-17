@@ -13,9 +13,9 @@ from tensorboardX import SummaryWriter
 from PIL import Image
 from torchvision.transforms import Resize
 
-from model import LapSRN, PatchD
+from model import LapSRN, PatchD, DeblurNet
 from loss import CharbonnierLoss, CombinedLoss, SaliencyLoss, make_vgg16_loss
-from dataset import Dataset, Split, SplitDataset, get_lr_transform, get_hr_transform
+from dataset import Dataset, Split, SplitDataset, get_lr_transform, get_hr_transform, get_blur_transform
 from gan import GAN
 
 def save_checkpoint(epoch, generator, discriminator, optimizer_generator, optimizer_disc, filename, use_adversarial):
@@ -65,7 +65,7 @@ def train(epoch, generator, gan, criterion, optimizer_generator, writer, train_d
         else:
             adversarial_loss = 0.0
         # TODO: Generalise
-        image_loss = loss_hr[0] + loss_hr[1]
+        image_loss = sum(loss_hr)
         cum_image_loss += image_loss.data[0]
 
         loss = image_loss + adversarial_loss
@@ -94,8 +94,12 @@ def train(epoch, generator, gan, criterion, optimizer_generator, writer, train_d
 def validate(epoch, generator, gan, criterion, writer, validation_data):
     use_adversarial = gan is not None
     
-    cum_psnr = np.array([0.0, 0.0])
-    cum_hr_loss = np.array([0.0, 0.0])
+    if args.mode == 'sr':
+        cum_psnr = np.array([0.0, 0.0])
+        cum_hr_loss = np.array([0.0, 0.0])
+    else:
+        cum_psnr = np.array([0.0])
+        cum_hr_loss = np.array([0.0])
 
     if use_adversarial:
         cum_critic_loss = 0.0
@@ -124,23 +128,19 @@ def validate(epoch, generator, gan, criterion, writer, validation_data):
             cum_critic_loss += critic_loss.data[0]
 
 
-    # TODO: Generalise
-    print("Validation Avg. PSNR: {}, {}, Validation Image Loss: {} {}.".format(
-        cum_psnr[0]/len(validation_data),
-        cum_psnr[1]/len(validation_data),
-        cum_hr_loss[0]/len(validation_data),
-        cum_hr_loss[1]/len(validation_data)
+    print("Validation Avg. PSNR: {}, Validation Image Loss: {}.".format(
+        cum_psnr/len(validation_data),
+        cum_hr_loss/len(validation_data)
     ))
 
     if use_adversarial:
         print("Validation Neg. Critic Loss = {}".format(-cum_critic_loss))
         writer.add_scalar('data/validation_neg_critic_loss', -cum_critic_loss/len(validation_data), epoch)
         
-    # TODO: Generalise
-    writer.add_scalar('data/validation_psnr_2', cum_psnr[0]/len(validation_data), epoch)
-    writer.add_scalar('data/validation_psnr_4', cum_psnr[1]/len(validation_data), epoch)
-    writer.add_scalar('data/validation_image_loss_2', cum_hr_loss[0]/len(validation_data), epoch)
-    writer.add_scalar('data/validation_image_loss_4', cum_hr_loss[1]/len(validation_data), epoch)
+    for i, (psnr, hr_loss) in enumerate(zip(cum_psnr, cum_hr_loss)):
+        scale = 2**(i+1)
+        writer.add_scalar('data/validation_psnr_{}'.format(scale), psnr/len(validation_data), epoch)
+        writer.add_scalar('data/validation_image_loss_{}'.format(scale), hr_loss/len(validation_data), epoch)
 
     # Upscale one image for testing:
     imgs, _  = validation_data.dataset[np.random.randint(0, len(validation_data.dataset))]
@@ -170,6 +170,8 @@ def main():
     parser.add_argument('--seed', type=int,
                         help="Value for random seed. Default: Random.")
     # ---------------------- Model settings ---------------------------------------
+    parser.add_argument('--mode', type=str, default='sr', choices=['sr', 'denoise'],
+                        help="Set operation mode, either upscaling (=sr) or deblurring (=denoise)")
     parser.add_argument('--depth', type=int, default=10,
                         help="Set number of convolution layers for each feature extraction stage.")
     # ------------------ Optimizer settings ---------------------------------------
@@ -198,6 +200,7 @@ def main():
     parser.add_argument('--checkpoint-every', type=int, default=333,
                         help="Sets how often a checkpoint gets written. Default: 333")
 
+    global args # todo: remove global?s
     args = parser.parse_args()
     print("Called with args={}".format(args))
 
@@ -212,7 +215,11 @@ def main():
     print("Using seed={}.".format(seed))
     
     # Set up networks
-    generator = LapSRN(depth=args.depth).cuda().train()
+    if args.mode == 'sr':
+        generator = LapSRN(depth=args.depth).cuda().train()
+    else:
+        generator = DeblurNet(depth=args.depth).cuda().train()
+
     print(generator)
     if args.adversarial:
         if args.use_wgan:
@@ -235,7 +242,7 @@ def main():
     else:
         # Paper uses SGD with LR=1e-5
         optimizer_generator = optim.SGD(generator.parameters(), weight_decay=1e-4, lr=args.lr, momentum=0.9)
-        optimizer_generator = optim.Adam(generator.parameters(), weight_decay=0.0, lr=args.lr)
+        optimizer_generator = optim.Adam(generator.parameters(), weight_decay=1e-4, lr=args.lr)
         optimizer_discriminator = None
 
     # Set up losses
@@ -281,7 +288,10 @@ def main():
     # Set needed data transformations.
     CROP_SIZE = 128 # is 128 in paper
     hr_transform = get_hr_transform(CROP_SIZE, random=True)
-    lr_transforms = [get_lr_transform(CROP_SIZE, factor, random=True) for factor in [2, 4]]
+    if args.mode == 'sr':
+        lr_transforms = [get_lr_transform(CROP_SIZE, factor, random=True) for factor in [2, 4]]
+    else:
+        lr_transforms = [get_blur_transform(max_blur=2)]
 
     # Load datasets and set transforms.
     dataset = Dataset(args.data_dir, hr_transform=hr_transform, lr_transforms=lr_transforms, verbose=True)
