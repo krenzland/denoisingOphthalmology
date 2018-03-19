@@ -82,7 +82,7 @@ def train(epoch, generator, gan, criterion, optimizer_generator, writer, train_d
         cum_image_loss/len(train_data),
         cum_loss/len(train_data)))
     writer.add_scalar('data/image_loss', cum_image_loss/len(train_data), epoch)
-    writer.add_scalar('data/total_loss', cum_loss, epoch/len(train_data))
+    writer.add_scalar('data/total_loss', cum_loss/len(train_data), epoch)
 
     if use_adversarial:
         print("Negative critic loss = {}, Adversarial loss={}".format(
