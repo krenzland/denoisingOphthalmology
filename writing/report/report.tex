@@ -30,7 +30,10 @@
 
 \maketitle
 
-\section{Modeling Considerations}
+\section{Introduction}
+...
+
+\section{Literature Review}
 
 \subsection{Architectures}
 \label{sec:architecturs}
@@ -136,6 +139,80 @@ EnhanceNet-PAT~\cite{EnhanceNet} & 28.56 & 25.77 & 24.93   \\
 Bicubic        & 28.42 & 26.1  & 25.96   \\ \bottomrule
 \end{tabular}
 \end{table}
+
+\section{Architecture}
+We use an architecture that is similar to \textsc{LapSrn} presented in~\cite{LapSRN}.
+That means that we use a network consisting of two branches.
+The first branch is called \textbf{image reconstruction branch} and upscales the low resolution image using simple upscaling filters.
+The second branch extracts features from the low resolution image and predicts the \textbf{residual} for each upscaled image of the first branch.
+
+Our model differs in two ways from the original architecture:
+\begin{itemize}
+\item We use three-channel \textsc{rgb} images both as input and output instead of working only on the Y-channel.
+\item Instead of transposed convolutions we use resize-convolution blocks.
+  They are composed of a nearest neighbour interpolation and a standard convolution filter.
+  Empirical evidence suggest that they lead to fewer interpolation artefacts than transposed convolution, especially when they are used in a \textsc{gan} framework\cite{deconvolution}.
+\end{itemize}
+
+\section{Loss functions}
+We use a combination of a saliency-weighted L1-loss, an perceptual loss and an adversarial loss for our experiments.
+
+The Charbonnier-Loss is defined by
+\begin{align}
+\label{eq:charbonnier}
+    L( \hat{\bm{y}}, \bm{y}; \bm{\theta}) = \sum_n p \left( \bm{\hat{y}} - \bm{y} \right),
+    \intertext{with }
+    p(\bm{x}) = \sqrt{ \langle x, x \rangle  + \epsilon^2},
+\end{align}
+where $\varepsilon$ is a parameter set to $1e-6$ for our experiments.
+This is a differentiable approximation of the $L_1$ loss which leads to sharper edges compared to a standard \textsc{mse}-loss.
+Additionally, results for our chosen architecture indicate that choosing this loss leads to a faster convergence~\cite{LapSRN}.
+
+Secondly, we use a perceptual loss.
+The idea is to not compare images pixel-wise but consider difference of filtered images.
+This loss can be defined for an arbitrary filter map as
+\begin{equation}
+  \label{eq:perceptual-loss}
+  L_p = \Vert \phi( \bm{\hat{y}} ) - \phi (\bm{y}) \Vert_2^2 .
+\end{equation}
+We use filter maps $\phi$ taken from the pooling layers of a pre-trained VGG-19 network.
+This leads to visually better images but decreased PSNR.
+See~\cite{PerceptualLoss} for motivation and details.
+
+While the images in standard super-resolution tasks do not share a lot of common structure, retinal fundus images are visually similar to each other.
+This can be used to create hand-crafted filters.
+We use the saliency maps of~\cite{SaliencyGAN}.
+They combine the curvature of the images and the entropy of pixels.
+
+As a final building block we use an adversarial loss.
+Training the model now resembles a two-player game between a generator an a discriminator network.
+The discriminator tries to decide, whether an image is a ground-truth high-resolution image or an low resolution image that was upsampled by the generator.
+This is realized as the optimization game\todo{Cite original gan paper}
+\begin{align}
+  \cdots.
+\end{align}
+To improve numerical stability, the discriminator optimizes \(\cdots\) instead.
+
+The first implementation that used an adversarial loss for single-image super-resolution was~\cite{SRGAN} which resulted in visually pleasing images.
+\todo{Describe imagined artefacts?}
+\todo{Only standard GAN? or also wgan?}
+
+\section{Training}
+We use a batch size of $64$ for all experiments.
+
+We use \textsc{adam}\ \todo{cite adam} with an initial learning rate of $1r-4$ for both generator and discriminator.
+The generator is trained for $10^5$ gradient iterations, after this the learning rate is decreased to $1e-5$ and the network is trained for another $10^5$ iterations.
+
+We first train solely the generator without the adversarial loss.
+The resulting network is then used to initialise the adversarial training.
+
+
+
+\section{Evaluation}
+...
+
+\section{Summary}
+...
 
 \printbibliography
 \end{document}
