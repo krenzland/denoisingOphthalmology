@@ -8,6 +8,7 @@ import torch
 from torch.autograd import Variable
 from torchvision.transforms import ToTensor, ToPILImage, Normalize, CenterCrop
 from PIL import Image, ImageFilter
+import PIL.ImageChops as chop
 from skimage.filters import frangi, threshold_otsu, sobel
 from skimage import measure
 from skimage.io._plugins.pil_plugin import pil_to_ndarray, ndarray_to_pil
@@ -58,6 +59,18 @@ def residual(y, y_hat, transform=lambda x:x):
     y_hat = transform(y_hat)
     return chop.subtract(y, y_hat, scale=0.05)
 
+def acc(a, b, transform=lambda x:x):
+    a = a.convert('YCbCr').split()[0]
+    b = a.convert('YCbCr').split()[0]
+    a = transform(a)
+    b = transform(b)
+    a = (np.array(a)/255.0).astype(bool)
+    b = (np.array(b)/255.0).astype(bool)
+    assert(a.size == b.size)
+    size = a.size
+    correct = (a == b).sum()
+    return correct/size * 100.0
+
 def acc(y, y_hat, transform=lambda x:x):
     y = np.array(transform(y))
     y_hat = np.array(transform(y_hat))
@@ -82,29 +95,35 @@ def edges(img):
     arr = pil_to_ndarray(img.convert('YCbCr').split()[0])
     return ndarray_to_pil(sobel(arr))
 
-def vessels(img, mask=None):
-    img = np.array(img.convert('YCbCr').split()[0]).astype(float)
+def vessels(img, mask):
+    params = {'beta1': 0.7,
+              'beta2': 0.01,
+              'scale_max': 3,
+              'scale_min': 0,
+              'threshold': 0.2} 
+
+    img = np.array(img.convert('YCbCr').split()[0]).astype(float)/255.
 
     # Ignore background
-    if mask is None:
-        thresh = threshold_otsu(img)
-        black = img < thresh
-    else:
-        black = np.array(mask) == 0
+    thresh = threshold_otsu(img, nbins=255)
+    black = img < thresh
 
     # Compute vessels
-    vessels = frangi(img, scale_range=(2, 6), beta2=3.8, beta1=0.4)
+    vessels = frangi(img, scale_range=(params['scale_min'], params['scale_max']),
+                     beta1=params['beta1'],
+                     beta2=params['beta2'],
+                     black_ridges=True)
 
     # Reset black pixels to black. Otherwise we get a surrounding ring.
+    #vessels[mask] = 0.0
     vessels[black] = 0.0
-    vessels = (vessels > 0.2)*1.0
-    vessels = Image.fromarray(vessels*255).convert('RGB')    
-
+    vessels = (vessels > params['threshold'])
+    vessels = Image.fromarray(vessels*255.0)
     return vessels
 
 def main():
     checkpoint_dir = Path('../best_checkpoints/')
-    models = ['l1', 'perceptual', 'perceptual_pool4', 'wgan']
+    models = ['l1_noSmartCrop', 'l1', 'perc_256', 'perceptual', 'perceptual_pool4', 'gan', 'wgan', 'saliency']
     model_to_checkpoint = lambda m: checkpoint_dir / '{}.pt'.format(m) 
 
     rows = []
@@ -129,19 +148,18 @@ def main():
             # Find next largest crop size that is divisible by four.
             crop_size = [int(np.ceil(s/4)*4) for s in img.size]
             lr_crop_size = [s//4 for s in (crop_size)]
-            blur_strength = 0.0  # TODO.
 
             center_crop = CenterCrop(crop_size[::-1]) # pads s.t. img is div. by 4
             back_crop = CenterCrop(img.size[::-1]) # crop back to orig. img. size
 
-            hr4_gt = img
-            hr4_blurred = hr4_gt.filter(ImageFilter.GaussianBlur(blur_strength))
-            lr = hr4_blurred.resize(lr_crop_size, Image.BICUBIC)
+            hr4_gt = center_crop(img)
+            lr = hr4_gt.resize(lr_crop_size, Image.BICUBIC)
 
             elapsed_time, *sr_out = upsample_tensor(model, lr, to_normalize=True, return_time=True)
             hr2_sr, hr4_sr = [back_crop(to_pil(out)) for out in sr_out]
             hr2_bic, hr4_bic = [back_crop(out) for out in upsample_bic(lr)]
 
+            hr4_gt = img
             psnr_sr = measure.compare_psnr(np.array(hr4_gt), np.array(hr4_sr))
             psnr_bic = measure.compare_psnr(np.array(hr4_gt), np.array(hr4_bic))
 
