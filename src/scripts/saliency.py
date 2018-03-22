@@ -1,53 +1,161 @@
 #!/usr/bin/env python3
 from PIL import Image
-from skimage import io, color
-import skimage.filters as fil
+
 
 import sys
 import numpy as np
+import numba
+from scipy import ndimage
+from skimage.filters import threshold_otsu
+from skimage import color
 from pathlib import Path
 
+def extend_mask(mask, extend_by=1):
+    for _ in range(extend_by):
+        # Gradient is true at edge of mask
+        m_dx, m_dy = [deriv.astype(bool) for deriv in np.gradient(mask*1.0)]
+        mask = np.bitwise_or(mask, np.bitwise_or(m_dx, m_dy))
+    return mask
+
+def compute_curvature(arr, deriv='gaussian'):
+    # http://www0.cs.ucl.ac.uk/staff/S.Arridge/teaching/ndsp/imcurvature.m
+    # Note: Individual derivatives might be exchanged, doesn't matter for curvature though!
+    deriv = 'gaussian'
+    if deriv == 'gaussian':
+        sigma=1
+        img_dx = ndimage.gaussian_filter(arr, order=[1,0], sigma=sigma)
+        img_dy = ndimage.gaussian_filter(arr, order=[0,1], sigma=sigma)
+        img_dxx = ndimage.gaussian_filter(arr, order=[2,0], sigma=sigma)
+        img_dyy = ndimage.gaussian_filter(arr, order=[0,2], sigma=sigma)
+        img_dxy = ndimage.gaussian_filter(arr, order=[1,1], sigma=sigma)
+        img_dyx = img_dxy
+    else:
+        sobel = 1/8 * np.array([-1,0,1,-2,0,2,-1,0,1]).reshape(3,3)
+        img_dx = ndimage.convolve(arr, sobel)
+        img_dy = ndimage.convolve(arr, sobel.T)
+        img_dxx = ndimage.convolve(img_dx, sobel)
+        img_dyy = ndimage.convolve(img_dy, sobel.T)
+        img_dxy = ndimage.convolve(img_dx, sobel.T)
+        img_dyx = ndimage.convolve(img_dy, sobel)
+
+    gradient_magnitude = np.sqrt(img_dx**2 + img_dy**2)
+    curvature = 1.0/gradient_magnitude
+
+    invalid = (arr <= 0.0) | (gradient_magnitude == 0.0)
+    curvature[invalid] = 0.0
+
+    # mask is true where grad is possibly zero
+    mask = np.zeros_like(invalid, dtype=bool)
+    mask[invalid] = True
+
+    #mask1 = extend_mask(mask)
+    mask2 = extend_mask(mask, extend_by=2)
+
+    curvature = img_dy**2 * img_dxx - img_dx * (img_dxy + img_dyx) * img_dy + img_dx**2 * img_dyy
+    curvature[~mask2] = curvature[~mask2] / gradient_magnitude[~mask2]**3
+    curvature[mask2] = 0.0
+    
+    return curvature.clip(0,1)
+
+@numba.stencil(neighborhood=((-3, 3),(-3,3)), cval=-42.0)
+def entropy_kernel(hist):
+    # First compute local probabilities (disc. using passed bins)
+    count = np.zeros(8)
+    # todo: exclude middle?
+    it = np.array([-3,-2,-1,0, 1,2,3])
+    for i in it:
+        for j in it:
+            count[hist[i,j]] += 1
+
+    probs = count / count.sum() # normalize
+    
+    # Now compute entropy.
+    entropy = 0.0
+    for i in it:
+        for j in it:      
+            p = probs[hist[i,j]]
+            log_p = np.log(p)
+            entropy += -1 * p * log_p    
+    return entropy
+
+def compute_entropy(arr):
+    num_bins=8
+    # computed over all training examples of messidor dataset
+    probabilities = np.array([2.14666701e-01, 7.53968572e-02, 3.29558442e-01, 2.77342253e-01,
+        8.88463917e-02, 1.17787479e-02, 2.09750599e-03, 3.13101494e-04])
+    edges = np.array([  0.   ,  31.875,  63.75 ,  95.625, 127.5  , 159.375, 191.25 ,
+        223.125, 255.   ])/255.0
+
+    
+    # Reflect pad for better stability at borders
+    pad_width = 3
+    arr = np.pad(arr, pad_width=pad_width, mode='reflect')
+    
+    hist = np.digitize(arr, edges, right=True).clip(0, num_bins-1) # interval should be open on both ends
+    entr = entropy_kernel(hist)
+    
+    # Remove padding
+    entr = entr[pad_width:-pad_width, pad_width:-pad_width]
+    
+    # Fiannly use a Gaussian low pass filter to remove small elements
+    entr = ndimage.gaussian_filter(entr, 0.5, truncate=3)
+    # Normalize to (0,1)
+    entr = entr/entr.max()
+    
+    # Make sure the invalid constant padding is removed!
+    assert(entr.min() >= 0.0)
+    
+    return entr
+
+@numba.jit(nopython=True, parallel=True)
+def get_neighbour_distance(size_sqrt=7):
+    assert(size_sqrt % 2 == 1)
+    size = size_sqrt**2
+    d = np.zeros(size).reshape(size_sqrt, size_sqrt)
+    center = size_sqrt//2
+    #d[center][center] = 0.0 # center
+    for i in range(1):
+        for j in range(1):
+            d[center+i][center+j] = (i**2 + j**2)**0.5
+            d[center+i][center-j] = (i**2 + j**2)**0.5
+            d[center-i][center+j] = (i**2 + j**2)**0.5
+            d[center-i][center-j] = (i**2 + j**2)**0.5
+    #d = np.zeros(size).reshape(size_sqrt, size_sqrt)
+    #d[center][center] = 1.0
+    d = np.exp(-d)
+    return d
+
+@numba.stencil(neighborhood=((-1, 1),(-1,1)), standard_indexing=('neighborhood',))
+def uniq_kernel(feature_map, neighborhood):
+    feature_center = feature_map[0,0]
+    uniqueness = 0.0
+    for i in range(3):
+        for j in range(3):
+            feature_dist = np.abs(feature_center - feature_map[-1+i,-1+j])
+            uniqueness += neighborhood[i,j] * feature_dist
+    return uniqueness
+    
+def uniqueness(feature_map):
+    neighborhood = get_neighbour_distance(size_sqrt=3)
+    uniq = uniq_kernel(feature_map, neighborhood)
+    return uniq/uniq.max()
+
 def saliency(img):
-    """
-    Computes the curvedness of the image and use as saliency.
-    """
     arr = color.rgb2gray(np.array(img))
     arr = np.float32(arr)
 
     # Ignore background
-    black = fil.threshold_otsu(arr)
+    black = threshold_otsu(arr)
     black = arr < black
 
-    # Pad
-    pad_width = 40
-    arr = np.pad(arr, pad_width=pad_width, mode='reflect')
-
-    # Add slight blur for stability
-    arr = fil.gaussian(arr, sigma=1.5)
+    curvature = compute_curvature(arr)
+    entropy = compute_entropy(arr)
+    uniq_curv = uniqueness(curvature) 
+    uniq_entr =  uniqueness(1.0-entropy)
     
-    # Compute image derivatives
-    img_dx = fil.scharr_h(arr)
-    img_dy = fil.scharr_v(arr)
-    img_dxx = fil.scharr_h(img_dx)
-    img_dyy = fil.scharr_v(img_dy)
-    img_dxy = fil.scharr_v(img_dx)
-    
-    # Assemble to curvedness
-    curvedness = np.sqrt(img_dxx**2 + 2* img_dxy**2 + img_dyy**2) 
-
-    # Unpad.
-    c = curvedness[pad_width:-pad_width, pad_width:-pad_width].copy()
-
-    # Remove black border
-    c[black] = 0
-
-    # Reweight image, set weight equal for all heavily weighted objects.
-    hi = np.percentile(curvedness, q=[97.5])[0]
-    c = c.clip(0.0, hi)
-
-    # Finally convert to image.
-    c = c/c.max()
-    saliency = Image.fromarray(c*255.0).convert('RGB')
+    saliency = 0.4 * uniq_curv + 0.6 * uniq_entr
+    saliency[black] = 0.0
+    saliency = Image.fromarray(saliency*255.0).convert('RGB')
     return saliency
 
 def main():
