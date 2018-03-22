@@ -31,6 +31,7 @@
 \maketitle
 
 \section{Introduction}
+\todo{Write introduction}
 ...
 
 \section{Literature Review}
@@ -154,6 +155,10 @@ Our model differs in two ways from the original architecture:
   Empirical evidence suggest that they lead to fewer interpolation artefacts than transposed convolution, especially when they are used in a \textsc{gan} framework\cite{deconvolution}.
 \end{itemize}
 
+We use the PatchGan discriminator presented in~\cite{PatchGAN}.
+This is a fully convolutional discriminator that penalizes on a basis $70\times70$ patches.
+In our case this can be interpreted as a very coarse texture loss.
+
 \section{Loss functions}
 We use a combination of a saliency-weighted L1-loss, an perceptual loss and an adversarial loss for our experiments.
 
@@ -187,7 +192,7 @@ They combine the curvature of the images and the entropy of pixels.
 As a final building block we use an adversarial loss.
 Training the model now resembles a two-player game between a generator an a discriminator network.
 The discriminator tries to decide, whether an image is a ground-truth high-resolution image or an low resolution image that was upsampled by the generator.
-This is realized as the optimization game\todo{Cite original gan paper}
+This is realized as the optimization problem~\cite{GAN}
 \begin{align}
   \cdots.
 \end{align}
@@ -198,19 +203,30 @@ The first implementation that used an adversarial loss for single-image super-re
 \todo{Only standard GAN? or also wgan?}
 
 \section{Training}
+We use the Messidor dataset~\cite{Messidor} which consists of 1200 high resolution fundus images.
+We used 80\% of the dataset for training, the rest was used for validation.
+The images were augmented by random horicontally and vertically flips, scaling by a factor between $0.5$ and $1.0$ and rotation by 0, 90, 180 or 270 degrees \todo{check rotation}.
+As a last augmentation, a random crop of size 128 is chosen.
+We try to sample crops that contain more information, to do this we reject crops which either contain too many black pixels or too few blood vessel pixels.
+The blood vessels are detected using a Frangi-filter \todo{cite frangi filter}.
 We use a batch size of $64$ for all experiments.
 
-We use \textsc{adam}\ \todo{cite adam} with an initial learning rate of $1r-4$ for both generator and discriminator.
+Both networks are optimized by \textsc{adam}~\cite{adam} with an initial learning rate of $1r-4$.
 The generator is trained for $10^5$ gradient iterations, after this the learning rate is decreased to $1e-5$ and the network is trained for another $10^5$ iterations.
-
 We first train solely the generator without the adversarial loss.
-The resulting network is then used to initialise the adversarial training.
+The resulting network is then used to initialise the adversarial training, which continues for another $10^5$ iterations.
+We validate after every $1005$ update iterations.
 
 
 
 \section{Evaluation}
 ...
-
+\todo{Cite SSIM}
+\todo{PSNR table}
+\todo{Segmentation table, Frangi AND Retina-U-NEt}
+\todo{Cite retina unet (link)}
+\todo{Cite DRIVE database}
+\todo{Intraoperative evaluation}
 \section{Summary}
 ...
 
