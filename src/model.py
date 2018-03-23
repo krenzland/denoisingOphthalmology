@@ -37,20 +37,6 @@ def bilinear_upsample_matrix(filter_size, weights):
     
     return torch.Tensor(weights)
 
-class ResidualBlock(nn.Module):
-    def __init__(self):
-        super(ResidualBlock, self).__init__()
-
-        self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
-        self.conv1 = nn.Conv2d(64, 64, 3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(64, 64, 3, stride=1, padding=1)
-
-    def forward(self, x):
-        residual = x
-        x = self.lrelu(self.conv1(x))
-        x = self.conv2(x)
-
-        return residual + x
 
 class ResizeConvolution(nn.Module):
     def __init__(self, num_channels=64):
@@ -65,22 +51,18 @@ class ResizeConvolution(nn.Module):
         return self.convolution(x)
     
 class FeatureExtraction(nn.Module):
-    def __init__(self, depth=3, residual=False):
+    def __init__(self, depth=3, residual=False, upsample=True):
         super().__init__()
         
         LReLu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
         filters = nn.Sequential()
         
         for i in range(depth):
-            if residual:
-                filters.add_module('conv{}'.format(i), ResidualBlock())
-            else:
                 filters.add_module('conv{}'.format(i), nn.Conv2d(64, 64, 3, stride=1, padding=1))
-                #filters.add_module('norm{}'.format(i), nn.InstanceNorm2d(64))
                 filters.add_module('lrelu{}'.format(i), LReLu)
 
-        #filters.add_module('convt_upsample', nn.ConvTranspose2d(64, 64, 4, stride=2, padding=1))
-        filters.add_module('resize_conv', ResizeConvolution(num_channels=64))
+        if upsample:
+            filters.add_module('resize_conv', ResizeConvolution(num_channels=64))
         filters.add_module('lrelu_upsample', LReLu)                   
         
         self.seq = filters
@@ -99,17 +81,16 @@ class FeatureExtraction(nn.Module):
 
     
 class ImageReconstruction(nn.Module):
-    def __init__(self):
+    def __init__(self, upsample=True):
         super(ImageReconstruction, self).__init__()
-        self.conv_residual = nn.Conv2d(64, 3, 3, stride=1, padding=1) # last filter -> res
-        #self.upsample = nn.ConvTranspose2d(3, 3, 4, stride=2, padding=1)
-        self.upsample = ResizeConvolution(num_channels=3)
+        self.conv_residual = nn.Conv2d(64, 3, 3, stride=1, padding=1)
+        if upsample:
+            self.upsample = ResizeConvolution(num_channels=3)
+        else:
+            self.upsample = lambda x: x
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                # No He init here, as not followed by LRelu?
-                #init.orthogonal(m.weight)
-                #init.kaiming_normal(m.weight, a=0.2)
                 init.xavier_normal(m.weight)
                 m.bias.data.fill_(0.0)
             if isinstance(m, nn.ConvTranspose2d):
@@ -123,27 +104,21 @@ class ImageReconstruction(nn.Module):
 
     
 class LapSRN(nn.Module):
-    def __init__(self, upsampling_factor=4, depth=5):
+    def __init__(self, depth=10, upsample=True):
         super(LapSRN, self).__init__()
         
-        # TODO: Don't ignore this!
-        n_layers = np.log2(upsampling_factor).astype(np.int32)
-        
-        # Pytorch doesn't consider layers stored in a list.
-        # See: https://discuss.pytorch.org/t/list-of-nn-module-in-a-nn-module/219
-        # As a work-around create layers for 8x-upsampling and ignore unneeded layers
-        # TODO: Use http://pytorch.org/docs/0.3.0/nn.html#modulelist
-
         self.in_conv = nn.Sequential((nn.Conv2d(3, 64, 3, stride=1, padding=1)), nn.LeakyReLU(negative_slope=0.2, inplace=True))
-        #init.kaiming_normal(self.in_conv[0].weight, a=0.2)
+
         init.xavier_normal(self.in_conv[0].weight)
         self.in_conv[0].bias.data.fill_(0.0)
         
-        self.feature_extraction0 = FeatureExtraction(depth=depth)
-        self.feature_extraction1 = FeatureExtraction(depth=depth)
+        self.feature_extraction0 = FeatureExtraction(depth=depth, 
+                                                     upsample=upsample)
+        self.feature_extraction1 = FeatureExtraction(depth=depth,
+                                                     upsample=upsample)
 
-        self.image_reconstruction0 = ImageReconstruction()
-        self.image_reconstruction1 = ImageReconstruction()
+        self.image_reconstruction0 = ImageReconstruction(upsample=upsample)
+        self.image_reconstruction1 = ImageReconstruction(upsample=upsample)
 
     def forward(self, image):
         features0 = self.feature_extraction0(self.in_conv(image))
@@ -153,38 +128,6 @@ class LapSRN(nn.Module):
         hr4 = self.image_reconstruction1(hr2, features1) 
       
         return hr2, hr4
-    
-class DeblurNet(nn.Module):
-    def __init__(self, depth):
-        super().__init__()
-        
-        lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
-        in_conv = nn.Conv2d(in_channels=3, out_channels=64, kernel_size=3, padding=1)
-        
-        self.seq = nn.Sequential(in_conv, lrelu)
-        
-        for d in range(depth):
-            self.seq.add_module('conv{}'.format(d),
-                                nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1))
-            self.seq.add_module('lrelu{}'.format(d),
-                                nn.LeakyReLU(negative_slope=0.2, inplace=True))
-        
-        out_conv = nn.Conv2d(in_channels=64, out_channels=3, kernel_size=3, padding=1)
-        self.seq.add_module('out_conv', out_conv)
-        
-        self.seq = nn.Sequential(*self.seq)
-        
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                init.xavier_normal(m.weight)
-                m.bias.data.fill_(0.0)
-            if isinstance(m, nn.ConvTranspose2d):
-                m.weight.data.copy_(bilinear_upsample_matrix(4, m.weight.data))
-
-    def forward(self, x):
-        out = self.seq(x)
-        # return list so that we are compatible with LapSRN interface!
-        return [out + x]
 
 
 class PatchD(nn.Module):

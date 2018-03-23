@@ -13,7 +13,7 @@ from tensorboardX import SummaryWriter
 from PIL import Image
 from torchvision.transforms import Resize
 
-from model import LapSRN, PatchD, DeblurNet
+from model import LapSRN, PatchD
 from loss import CharbonnierLoss, CombinedLoss, SaliencyLoss, make_vgg16_loss
 from dataset import Dataset, Split, SplitDataset, get_lr_transform, get_hr_transform, get_blur_transform
 from gan import GAN
@@ -179,8 +179,8 @@ def main():
                         help="Value for learning rate. Default: 1e-5")
     parser.add_argument('--batch-size', type=int, default=64,
                         help="Set batch size. Default: 32")
-    parser.add_argument('--num-epochs', type=int, default=16670,
-                        help="Set number of epochs. Default: 16670")
+    parser.add_argument('--num-epochs', type=int, default=6667*2,
+                        help="Set number of epochs. Default: 6667*2")
     parser.add_argument('--perceptual', action='store_true',
                         help="If true, use perceptual loss.")
     parser.add_argument('--adversarial', action='store_true',
@@ -216,9 +216,9 @@ def main():
     
     # Set up networks
     if args.mode == 'sr':
-        generator = LapSRN(depth=args.depth).cuda().train()
+        generator = LapSRN(depth=args.depth, upsample=True).cuda().train()
     else:
-        generator = DeblurNet(depth=args.depth).cuda().train()
+        generator = LapSRN(depth=args.depth, upsample=False).cuda().train()
 
     print(generator)
     if args.adversarial:
@@ -282,8 +282,9 @@ def main():
     else:
         start_epoch = 0
 
-    scheduler_generator = lr_scheduler.StepLR(optimizer_generator, step_size=6666, gamma=0.1, last_epoch = start_epoch - 1) # See LapSRN paper
-    scheduler_discriminator = lr_scheduler.StepLR(optimizer_generator, step_size=6666, gamma=0.1, last_epoch = start_epoch - 1)
+    # After 10e5 gradient updates lower LR once.
+    scheduler_generator = lr_scheduler.StepLR(optimizer_generator, step_size=6667, gamma=0.1, last_epoch = start_epoch - 1)
+    scheduler_discriminator = lr_scheduler.StepLR(optimizer_generator, step_size=6667, gamma=0.1, last_epoch = start_epoch - 1)
 
     # Set needed data transformations.
     CROP_SIZE = 128 # is 128 in paper
