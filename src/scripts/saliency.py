@@ -61,7 +61,7 @@ def compute_curvature(arr, deriv='gaussian'):
 def entropy_kernel(hist):
     # First compute local probabilities (disc. using passed bins)
     count = np.zeros(8)
-    # todo: exclude middle?
+    
     it = np.array([-3,-2,-1,0, 1,2,3])
     for i in it:
         for j in it:
@@ -79,26 +79,25 @@ def entropy_kernel(hist):
     return entropy
 
 def compute_entropy(arr):
-    num_bins=8
-    # computed over all training examples of messidor dataset
-    probabilities = np.array([2.14666701e-01, 7.53968572e-02, 3.29558442e-01, 2.77342253e-01,
-        8.88463917e-02, 1.17787479e-02, 2.09750599e-03, 3.13101494e-04])
     edges = np.array([  0.   ,  31.875,  63.75 ,  95.625, 127.5  , 159.375, 191.25 ,
         223.125, 255.   ])/255.0
 
-    
     # Reflect pad for better stability at borders
     pad_width = 3
     arr = np.pad(arr, pad_width=pad_width, mode='reflect')
     
-    hist = np.digitize(arr, edges, right=True).clip(0, num_bins-1) # interval should be open on both ends
+    # Discretise intensity using edges.
+    print(0, len(edges)-2)
+    hist = np.digitize(arr, edges, right=True).clip(0, len(edges)-2) # interval should be open on both ends
     entr = entropy_kernel(hist)
     
     # Remove padding
     entr = entr[pad_width:-pad_width, pad_width:-pad_width]
+    print(entr.min(), entr.max())
     
-    # Fiannly use a Gaussian low pass filter to remove small elements
+    # Finally use a Gaussian low pass filter to remove small elements
     entr = ndimage.gaussian_filter(entr, 0.5, truncate=3)
+
     # Normalize to (0,1)
     entr = entr/entr.max()
     
@@ -113,31 +112,38 @@ def get_neighbour_distance(size_sqrt=7):
     size = size_sqrt**2
     d = np.zeros(size).reshape(size_sqrt, size_sqrt)
     center = size_sqrt//2
-    #d[center][center] = 0.0 # center
-    for i in range(1):
-        for j in range(1):
+    for i in range(size_sqrt//2+1):
+        for j in range(size_sqrt//2+1):
             d[center+i][center+j] = (i**2 + j**2)**0.5
             d[center+i][center-j] = (i**2 + j**2)**0.5
             d[center-i][center+j] = (i**2 + j**2)**0.5
             d[center-i][center-j] = (i**2 + j**2)**0.5
-    #d = np.zeros(size).reshape(size_sqrt, size_sqrt)
-    #d[center][center] = 1.0
     d = np.exp(-d)
     return d
 
-@numba.stencil(neighborhood=((-1, 1),(-1,1)), standard_indexing=('neighborhood',))
+@numba.stencil(neighborhood=((-3, 3),(-3,3)), standard_indexing=('neighborhood',), cval=-42.0)
 def uniq_kernel(feature_map, neighborhood):
     feature_center = feature_map[0,0]
     uniqueness = 0.0
-    for i in range(3):
-        for j in range(3):
-            feature_dist = np.abs(feature_center - feature_map[-1+i,-1+j])
+    for i in range(7):
+        for j in range(7):
+            feature_dist = np.abs(feature_center - feature_map[-3+i,-3+j])
             uniqueness += neighborhood[i,j] * feature_dist
     return uniqueness
     
 def uniqueness(feature_map):
-    neighborhood = get_neighbour_distance(size_sqrt=3)
+    # Reflect pad for better stability at borders
+    pad_width = 3
+    feature_map = np.pad(feature_map, pad_width=pad_width, mode='reflect')
+
+    neighborhood = get_neighbour_distance(size_sqrt=7)
     uniq = uniq_kernel(feature_map, neighborhood)
+    
+    uniq = uniq[pad_width:-pad_width, pad_width:-pad_width]
+
+    # Make sure the invalid constant padding is removed!
+    assert(uniq.min() >= 0.0)
+
     return uniq/uniq.max()
 
 def saliency(img):
