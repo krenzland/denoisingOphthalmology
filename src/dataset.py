@@ -143,7 +143,7 @@ class SmartRandomCrop(object):
             crop = imgs[0].crop((j, i, j + w, i + h))
             crop_vessels = vessels.crop((j, i, j + w, i + h))
             if self._is_good_crop(crop, crop_vessels) or it == (max_tries - 1):
-                crops = [crop] + [img.crop((j, i, j + w, i + h)) for img in imgs[:1]]
+                crops = [crop] + [img.crop((j, i, j + w, i + h)) for img in imgs[1:]]
                 return crops
 
     def __repr__(self):
@@ -155,11 +155,11 @@ def load_image(path):
     return img 
 
 class Dataset(data.Dataset):
-    def __init__(self, path, hr_transform, lr_transforms, verbose=False, seed=19534, use_saliency=True):
+    def __init__(self, path, hr_transform, lr_transform, verbose=False, seed=19534, use_saliency=True):
         super(Dataset, self).__init__
         
         self.hr_transform = hr_transform
-        self.lr_transforms = lr_transforms
+        self.lr_transform = lr_transform
         self.to_tensor = ToTensor()
         self.normalize = Normalize(mean=[0.485, 0.456, 0.406],
                                    std=[0.229, 0.224, 0.225])
@@ -202,7 +202,6 @@ class Dataset(data.Dataset):
         saliency = self.saliency[idx]
         
         # Compute all transformations for the downscaled versions.
-        
         if self.use_saliency:
             hr, saliency = self.hr_transform(img, vessels=vessels, saliency=saliency)
             saliencies = [saliency]
@@ -210,14 +209,10 @@ class Dataset(data.Dataset):
             hr = self.hr_transform(img, vessels=vessels)
         
         imgs = [hr]
-        for transform in self.lr_transforms:
-                imgs.append(transform(imgs[-1]))
+        imgs += self.lr_transform(hr)
         if self.use_saliency:
-            # 1: because we don't need a saliency map for the lr image!
-            for transform in self.lr_transforms[:-1]:
-                # TODO: Don't do this if transform contains blur!
-                saliencies.append(transform(saliencies[-1]))
-        
+            saliencies += self.lr_transform(saliency, is_saliency=True)
+
         # lr, hr2, hr4, hr8 = ...
         # shape for crops of size 100: 12, 25, 50, 100
         tensors = [self.normalize(self.to_tensor(i)) for i in reversed(imgs)]
@@ -266,21 +261,6 @@ class SplitDataset(data.Dataset):
             idx += int(np.ceil(self.split_ratio * len(self.dataset)))    
 
         return self.dataset[idx]
-    
-blur_filter = lambda img: img.filter(ImageFilter.GaussianBlur(0 * np.random.uniform(0,1)))
-# TODO: Add blur!
-blur_fliter = lambda img: img
-
-def get_lr_transform(crop_size, factor, random=True):
-    # Factor = 2 for hr4, Factor = 4 for hr2
-    # Only blur LR image otherwise we get really noisy output!
-    if factor == 4 and not random:
-        return Compose([
-            #Lambda(blur_filter),
-            Resize(crop_size//factor, interpolation=Image.BICUBIC)
-        ])
-    else:
-        return Resize(crop_size//factor, interpolation=Image.BICUBIC)
 
 class HrTransform(object):
     def __init__(self, crop_size, random=True):
@@ -316,25 +296,49 @@ class HrTransform(object):
                 return img, saliency
             return img
 
-def get_hr_transform(crop_size, random=True):
-    return HrTransform(crop_size, random=random)
+class LrTransform(object):
+    def __init__(self, crop_size, factors, max_blur):
+        self.crop_size = crop_size
+        self.factors = factors
+        self.max_blur = max_blur
 
-blur_filter = lambda img: img.filter(ImageFilter.GaussianBlur(0 * np.random.uniform(0,1)))
-# TODO: Add blur!
-blur_fliter = lambda img: img
+    def _get_blurs(self):
+        if self.max_blur < 0:
+            # no blur needed.
+            return [0.0] * len(self.factors)
 
-def get_lr_transform(crop_size, factor, random=True):
-    # Factor = 2 for hr4, Factor = 4 for hr2
-    # Only blur LR image otherwise we get really noisy output!
-    if factor == 4 and not random:
-        return Compose([
-            #Lambda(blur_filter),
-            Resize(crop_size//factor, interpolation=Image.BICUBIC)
-        ])
-    else:
-        return Resize(crop_size//factor, interpolation=Image.BICUBIC) 
+        # First compute total blur
+        total_blur = np.random.uniform(0,self.max_blur)
 
-def get_blur_transform(max_blur=1.5, random=True):
-    assert(max_blur > 0.0)
-    blur_func = lambda img: img.filter(ImageFilter.GaussianBlur(np.random.uniform(0, max_blur)))
-    return Lambda(blur_func)
+        if len(self.factors) == 1:
+            return [total_blur]
+        elif len(self.factors) == 2:
+            # Blurring twice results in total blur of
+            # sqrt(blur_1**2 + blur_2**2)
+            # can be derived by conv. of two Gaussians
+            # In our case, we want to apply half of the blur to the first stage:
+            half_blur = (total_blur**2/2)**0.5
+            return [half_blur, total_blur]
+        else:
+            # Not needed here.
+            raise ValueError("More than 2 downsizing ops. not supported")
+
+    def __call__(self, img, is_saliency=False):
+        lr_imgs = []
+        # LR image needs no saliency and saliency must not be blurred!
+        blurs = self._get_blurs() if not is_saliency else [0.0] * (len(self.factors) - 1)
+        for factor, blur in zip(self.factors, blurs):
+            # First blur
+            if blur > 0:
+                lr_img = img.filter(ImageFilter.GaussianBlur(blur))
+            else:
+                lr_img = img
+            # Then downsample, if factor != 1
+            if factor != 1:
+                lr_img = lr_img.resize((self.crop_size//factor, self.crop_size//factor),
+                                       Image.BICUBIC)
+            lr_imgs.append(lr_img)
+        return lr_imgs
+
+
+        

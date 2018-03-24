@@ -15,7 +15,7 @@ from torchvision.transforms import Resize
 
 from model import LapSRN, PatchD
 from loss import CharbonnierLoss, CombinedLoss, SaliencyLoss, make_vgg16_loss
-from dataset import Dataset, Split, SplitDataset, get_lr_transform, get_hr_transform, get_blur_transform
+from dataset import Dataset, Split, SplitDataset, HrTransform, LrTransform
 from gan import GAN
 
 def save_checkpoint(epoch, generator, discriminator, optimizer_generator, optimizer_disc, filename, use_adversarial):
@@ -94,12 +94,9 @@ def train(epoch, generator, gan, criterion, optimizer_generator, writer, train_d
 def validate(epoch, generator, gan, criterion, writer, validation_data):
     use_adversarial = gan is not None
     
-    if args.mode == 'sr':
-        cum_psnr = np.array([0.0, 0.0])
-        cum_hr_loss = np.array([0.0, 0.0])
-    else:
-        cum_psnr = np.array([0.0])
-        cum_hr_loss = np.array([0.0])
+    # TODO: Adjust for unet denoising!
+    cum_psnr = np.array([0.0, 0.0])
+    cum_hr_loss = np.array([0.0, 0.0])
 
     if use_adversarial:
         cum_critic_loss = 0.0
@@ -150,8 +147,8 @@ def validate(epoch, generator, gan, criterion, writer, validation_data):
         out = img.data.clone()
 
         # Remove normalisation from image.
-        mean= [0.485, 0.456, 0.406]
-        std= [0.229, 0.224, 0.225]
+        mean = [0.485, 0.456, 0.406]
+        std = [0.229, 0.224, 0.225]
 
         # Undo input[channel] = (input[channel] - mean[channel]) / std[channel]
         for t, m, s in zip(out, mean, std):
@@ -252,7 +249,7 @@ def main():
         criterion = CharbonnierLoss().cuda()
 
     sal_loss = SaliencyLoss().cuda()
-    criterion = CombinedLoss([criterion, sal_loss]).cuda()
+    criterion = CombinedLoss([sal_loss]).cuda()
 
     if args.adversarial:
         gan = GAN(discriminator=discriminator,
@@ -288,14 +285,18 @@ def main():
 
     # Set needed data transformations.
     CROP_SIZE = 128 # is 128 in paper
-    hr_transform = get_hr_transform(CROP_SIZE, random=True)
+    hr_transform = HrTransform(CROP_SIZE, random=True)
     if args.mode == 'sr':
-        lr_transforms = [get_lr_transform(CROP_SIZE, factor, random=True) for factor in [2, 4]]
+        resize_factors = [2, 4]
     else:
-        lr_transforms = [get_blur_transform(max_blur=2)]
+        resize_factors = [1, 1] # no resizing here
+    lr_transform = LrTransform(crop_size=CROP_SIZE,
+                               factors=resize_factors,
+                               max_blur=2)
+    
 
     # Load datasets and set transforms.
-    dataset = Dataset(args.data_dir, hr_transform=hr_transform, lr_transforms=lr_transforms, verbose=True)
+    dataset = Dataset(args.data_dir, hr_transform=hr_transform, lr_transform=lr_transform, verbose=True)
     train_dataset = SplitDataset(dataset, Split.TRAIN, 0.8) 
     validation_dataset = SplitDataset(dataset, Split.TEST, 0.8)
     train_data = data.DataLoader(dataset=train_dataset, num_workers=6,\
@@ -314,7 +315,7 @@ def main():
         writer.add_scalar('hyper/lr', optimizer_generator.param_groups[0]['lr'], epoch)
         train(epoch, generator, gan, criterion, optimizer_generator, writer, train_data)
 
-        validate_every = 67 # epochs
+        validate_every = 1 # epochs
         if (epoch % validate_every) == 0 or (epoch == args.num_epochs):
             cum_psnr = validate(epoch, generator, gan, criterion, writer, validation_data)
 
