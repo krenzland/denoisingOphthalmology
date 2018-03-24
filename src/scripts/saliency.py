@@ -87,13 +87,11 @@ def compute_entropy(arr):
     arr = np.pad(arr, pad_width=pad_width, mode='reflect')
     
     # Discretise intensity using edges.
-    print(0, len(edges)-2)
     hist = np.digitize(arr, edges, right=True).clip(0, len(edges)-2) # interval should be open on both ends
     entr = entropy_kernel(hist)
     
     # Remove padding
     entr = entr[pad_width:-pad_width, pad_width:-pad_width]
-    print(entr.min(), entr.max())
     
     # Finally use a Gaussian low pass filter to remove small elements
     entr = ndimage.gaussian_filter(entr, 0.5, truncate=3)
