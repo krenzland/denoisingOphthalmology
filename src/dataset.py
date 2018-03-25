@@ -203,7 +203,8 @@ class Dataset(data.Dataset):
     def __getitem__(self, idx):
         img = self.images[idx]
         vessels = self.vessels[idx]
-        saliency = self.saliency[idx]
+        if self.use_saliency:
+            saliency = self.saliency[idx]
         
         # Compute all transformations for the downscaled versions.
         if self.use_saliency:
@@ -224,7 +225,7 @@ class Dataset(data.Dataset):
             tensors_saliency = [self.to_tensor(i) for i in reversed(saliencies)]
             return (tensors, tensors_saliency)
 
-        return (tensors)
+        return (tensors, [])
     
 class Split(Enum):
     ALL = 0,
@@ -288,10 +289,10 @@ class HrTransform(object):
                 img, saliency = self.random_flip([img, saliency])
                 return img, saliency
             else:
-                img, vessels = self.random_scaling(img, [vessels])
-                img = self.crop([img], vessels=vessels)
-                img = self.random_rotation([img])
-                img = self.random_flip([img])
+                img, vessels = self.random_scaling([img, vessels])
+                img = self.crop([img], vessels=vessels)[0]
+                img = self.random_rotation([img])[0]
+                img = self.random_flip([img])[0]
                 return img
         else:
             img = self.crop(img) 
@@ -346,6 +347,3 @@ class LrTransform(object):
                 lr_img = lr_img.filter(ImageFilter.GaussianBlur(blur))
             lr_imgs.append(lr_img)
         return lr_imgs
-
-
-        

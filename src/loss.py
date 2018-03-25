@@ -38,7 +38,7 @@ class CombinedLoss(nn.Module):
         super().__init__()
         self.criterions = criterions
 
-    def forward(self, x, y, saliencies=True):
+    def forward(self, x, y, saliencies=None):
         total = 0.0
         for crit in self.criterions:
             if isinstance(crit, SaliencyLoss):

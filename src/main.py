@@ -57,7 +57,10 @@ def train(epoch, generator, gan, criterion, optimizer_generator, writer, train_d
         out = generator(lr)
         
         # Compute pixel-wise/perceptual loss for both output imgs.
-        loss_hr = [criterion(a, b, saliency) for (a,b, saliency) in zip(out, ground_truth, saliencies)]
+        if len(saliencies) > 0:
+            loss_hr = [criterion(a, b, saliency) for (a,b, saliency) in zip(out, ground_truth, saliencies)]
+        else:
+            loss_hr =[criterion(a, b) for (a,b) in zip(out, ground_truth)] 
 
         if use_adversarial:
             adversarial_loss = gan.get_generator_loss(hr4_hat=out[-1])
@@ -118,7 +121,12 @@ def validate(epoch, generator, gan, criterion, writer, validation_data):
         cum_psnr += np.array([get_psnr(m) for m in mse_loss])
 
         # Compute pixel-wise/perceptual loss for both output imgs.
-        cum_hr_loss += np.array([criterion(a,b, saliency).data[0] for (a,b, saliency) in zip(ground_truth, out, saliencies)])
+        if len(saliencies) > 0:
+            cum_hr_loss += np.array([criterion(a,b, saliency).data[0] for (a,b, saliency)
+                                 in zip(ground_truth, out, saliencies)])
+        else:
+            cum_hr_loss += np.array([criterion(a,b).data[0] for (a,b)
+                                 in zip(ground_truth, out)])
 
         if use_adversarial:
             critic_loss = gan.get_discriminator_loss(hr4=ground_truth[-1], hr4_hat=out[-1])
@@ -234,11 +242,9 @@ def main():
             optimizer_generator = optim.Adam(generator.parameters(), betas=(0.0, 0.9), lr=args.lr)
             optimizer_discriminator = optim.Adam(discriminator.parameters(), betas=(0.0, 0.9), lr=args.lr)
         else:
-            optimizer_generator = optim.Adam(generator.parameters(), weight_decay=0.0, lr=args.lr)
+            optimizer_generator = optim.Adam(generator.parameters(), weight_decay=1e-4, lr=args.lr)
             optimizer_discriminator = optim.Adam(discriminator.parameters(), weight_decay=0.0, lr=args.lr)
     else:
-        # Paper uses SGD with LR=1e-5
-        optimizer_generator = optim.SGD(generator.parameters(), weight_decay=1e-4, lr=args.lr, momentum=0.9)
         optimizer_generator = optim.Adam(generator.parameters(), weight_decay=1e-4, lr=args.lr)
         optimizer_discriminator = None
 
@@ -249,7 +255,7 @@ def main():
         criterion = CharbonnierLoss().cuda()
 
     sal_loss = SaliencyLoss().cuda()
-    criterion = CombinedLoss([sal_loss]).cuda()
+    criterion = CombinedLoss([criterion]).cuda()
 
     if args.adversarial:
         gan = GAN(discriminator=discriminator,
@@ -293,10 +299,13 @@ def main():
     lr_transform = LrTransform(crop_size=CROP_SIZE,
                                factors=resize_factors,
                                max_blur=2)
-    
 
     # Load datasets and set transforms.
-    dataset = Dataset(args.data_dir, hr_transform=hr_transform, lr_transform=lr_transform, verbose=True)
+    dataset = Dataset(args.data_dir,
+                      hr_transform=hr_transform,
+                      lr_transform=lr_transform,
+                      use_saliency=False,
+                      verbose=True)
     train_dataset = SplitDataset(dataset, Split.TRAIN, 0.8) 
     validation_dataset = SplitDataset(dataset, Split.TEST, 0.8)
     train_data = data.DataLoader(dataset=train_dataset, num_workers=6,\
