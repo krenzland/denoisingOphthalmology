@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageFilter, ImageFile
+from scipy.ndimage.filters import gaussian_filter
 import torch.utils.data as data
 from torchvision.transforms import Compose, RandomCrop, ToTensor, Resize, RandomHorizontalFlip, RandomVerticalFlip, Lambda, CenterCrop, Grayscale, ColorJitter, Normalize
 import torchvision.transforms.functional as F
@@ -153,6 +154,38 @@ class SmartRandomCrop(object):
     def __repr__(self):
         return self.__class__.__name__ + '(size={0})'.format(self.size)
 
+
+class SpecularAugment(object):
+    def __init__(self, crop_size):
+        self.crop_size = crop_size
+     
+    def __call__(self, img):
+        # Apply transformation in 25% of cases
+        if random.random() > 0.25:
+            return img
+       
+        img = np.array(img, dtype=np.uint32)
+        mask = np.zeros_like(img)        
+        
+        pos_x = np.random.randint(low=0, high=self.crop_size)
+        pos_y = np.random.randint(low=0, high=self.crop_size)
+        radius = np.random.uniform(30, 50)
+        intensity = np.random.uniform(30, 50)
+
+        # Select points that s.t. they are still in image
+        xx, yy = np.mgrid[:img.shape[0], :img.shape[1]]
+        circle = ((xx - pos_x)**2 + (yy - pos_y)**2) < radius**2
+
+        # Create (blurred) mask
+        mask[circle] = intensity
+        mask = gaussian_filter(mask, sigma=5)
+
+        # Add mask only to pixels that are not black
+        black = img.sum(axis=-1) < 90
+        img[~black] = (img[~black] + mask[~black]).clip(0,255)
+        
+        return Image.fromarray(img.astype(np.uint8))
+
 def load_image(path):
     img = Image.open(path)
     img.load()
@@ -274,6 +307,7 @@ class HrTransform(object):
             self.random_scaling = RandomScaling(crop_size)
             self.random_rotation = RandomRotation()
             self.random_flip = RandomFlip()
+            self.specular = SpecularAugment(crop_size)
             self.crop = SmartRandomCrop(crop_size)
         else:
             self.crop = CenterCrop(crop_size)
@@ -287,12 +321,14 @@ class HrTransform(object):
                 img, saliency = self.crop([img, saliency], vessels=vessels)
                 img, saliency = self.random_rotation([img, saliency])
                 img, saliency = self.random_flip([img, saliency])
+                img = self.specular(img)
                 return img, saliency
             else:
                 img, vessels = self.random_scaling([img, vessels])
                 img = self.crop([img], vessels=vessels)[0]
                 img = self.random_rotation([img])[0]
                 img = self.random_flip([img])[0]
+                img = self.specular(img)
                 return img
         else:
             img = self.crop(img) 
