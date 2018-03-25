@@ -120,9 +120,13 @@ class SmartRandomCrop(object):
         return i, j, th, tw
 
     def _is_good_crop(self, crop, vessels):
-        is_not_black = (1.0*(np.array(self.grayscale(crop))) < 30).sum() < (self.size[0]**2)//2
-        contains_vessels =  (1.0 * (np.array(vessels) > 80)).sum() > (128*20)
-        return is_not_black and contains_vessels
+        # Image is at least 50% not entirely black
+        is_not_black = (np.array(crop).sum(axis=-1) < 90).sum() < (self.size[0]**2)//2
+        # Image contains at least one vessel.
+        # 1/256 (for crop size 128) has to be marked as vessel
+        # threshold is just to reduce random noise
+        contains_vessels =  (1.0 * (np.array(vessels) > 200)).sum() > (64)
+        return is_not_black and not contains_vessels
     
     def __call__(self, imgs, vessels=None):
         """
@@ -136,7 +140,7 @@ class SmartRandomCrop(object):
             imgs = [F.pad(img, self.padding) for img in imgs]
 
         crops = [None] * len(imgs)
-        max_tries = 20
+        max_tries = 5
         for it in range(max_tries):
             # Just trust the user that all imgs have the same size...
             i, j, h, w = self.get_params(imgs[0], self.size)
@@ -144,7 +148,8 @@ class SmartRandomCrop(object):
             crop_vessels = vessels.crop((j, i, j + w, i + h))
             if self._is_good_crop(crop, crop_vessels) or it == (max_tries - 1):
                 crops = [crop] + [img.crop((j, i, j + w, i + h)) for img in imgs[1:]]
-                return crops
+                print(it)
+                return crops, crop_vessels
 
     def __repr__(self):
         return self.__class__.__name__ + '(size={0})'.format(self.size)
