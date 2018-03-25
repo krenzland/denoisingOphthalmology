@@ -126,7 +126,7 @@ class SmartRandomCrop(object):
         # 1/256 (for crop size 128) has to be marked as vessel
         # threshold is just to reduce random noise
         contains_vessels =  (1.0 * (np.array(vessels) > 200)).sum() > (64)
-        return is_not_black and not contains_vessels
+        return is_not_black and contains_vessels
     
     def __call__(self, imgs, vessels=None):
         """
@@ -148,8 +148,7 @@ class SmartRandomCrop(object):
             crop_vessels = vessels.crop((j, i, j + w, i + h))
             if self._is_good_crop(crop, crop_vessels) or it == (max_tries - 1):
                 crops = [crop] + [img.crop((j, i, j + w, i + h)) for img in imgs[1:]]
-                print(it)
-                return crops, crop_vessels
+                return crops
 
     def __repr__(self):
         return self.__class__.__name__ + '(size={0})'.format(self.size)
