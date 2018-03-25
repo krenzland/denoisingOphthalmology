@@ -332,15 +332,18 @@ class LrTransform(object):
         # LR image needs no saliency and saliency must not be blurred!
         blurs = self._get_blurs() if not is_saliency else [0.0] * (len(self.factors) - 1)
         for factor, blur in zip(self.factors, blurs):
-            # First blur
-            if blur > 0:
-                lr_img = img.filter(ImageFilter.GaussianBlur(blur))
+            # First downsample if needed.
+            # Downsampling -> Blur is faster by a factor of factor.
+            if factor != 1:
+                lr_img = img.resize((self.crop_size//factor, self.crop_size//factor),
+                                       Image.BICUBIC)
             else:
                 lr_img = img
-            # Then downsample, if factor != 1
-            if factor != 1:
-                lr_img = lr_img.resize((self.crop_size//factor, self.crop_size//factor),
-                                       Image.BICUBIC)
+
+            # Then blur
+            if blur > 0:
+                blur = blur/factor # need to adjust blur radius
+                lr_img = lr_img.filter(ImageFilter.GaussianBlur(blur))
             lr_imgs.append(lr_img)
         return lr_imgs
 
