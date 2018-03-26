@@ -2,21 +2,27 @@
 import argparse
 from pathlib import Path
 import numpy as np
+import time
+
+# Training utilities
 import torch
 import torch.nn as nn
-import torch.utils.data as data
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
-from torch import autograd
+from torch.utils import data
 from torch.autograd import Variable
 from tensorboardX import SummaryWriter
-from PIL import Image
-from torchvision.transforms import Resize
 
-from model import LapSRN, PatchD
+# Models
+from models.unet import UNet
+from models.lap_srn import LapSRN
+from models.patch_discriminator import PatchD
+
+# Loss functions
 from loss import CharbonnierLoss, CombinedLoss, SaliencyLoss, make_vgg16_loss
-from dataset import Dataset, Split, SplitDataset, HrTransform, LrTransform
 from gan import GAN
+
+from dataset import Dataset, Split, SplitDataset, HrTransform, LrTransform
 
 def save_checkpoint(epoch, generator, discriminator, optimizer_generator, optimizer_disc, filename, use_adversarial):
     state = {
@@ -177,6 +183,8 @@ def main():
     # ---------------------- Model settings ---------------------------------------
     parser.add_argument('--mode', type=str, default='sr', choices=['sr', 'denoise'],
                         help="Set operation mode, either upscaling (=sr) or deblurring (=denoise)")
+    parser.add_argument('--model', type=str, default='LapSRN', choices=['LapSRN', 'UNet'],
+                        help="Set model that should be used, choices are LapSRN and UNet (for denoising only). Default: LapSRN")
     parser.add_argument('--depth', type=int, default=10,
                         help="Set number of convolution layers for each feature extraction stage.")
     # ------------------ Optimizer settings ---------------------------------------
@@ -221,9 +229,13 @@ def main():
     
     # Set up networks
     if args.mode == 'sr':
+        assert(args.model == 'LapSRN')
         generator = LapSRN(depth=args.depth, upsample=True).cuda().train()
     else:
-        generator = LapSRN(depth=args.depth, upsample=False).cuda().train()
+        if args.model == 'LapSRN':
+            generator = LapSRN(depth=args.depth, upsample=False).cuda().train()
+        else:
+            generator = UNet(num_classes=3).cuda().train()
 
     print(generator)
     if args.adversarial:
@@ -296,6 +308,10 @@ def main():
         resize_factors = [2, 4]
     else:
         resize_factors = [1, 1] # no resizing here
+    if args.model == 'UNet':
+        resize_factors = resize_factors[-1:] # TODO !
+
+    print(resize_factors)
     lr_transform = LrTransform(crop_size=CROP_SIZE,
                                factors=resize_factors,
                                max_blur=2)

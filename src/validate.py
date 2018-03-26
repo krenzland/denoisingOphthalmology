@@ -14,7 +14,7 @@ from skimage import measure
 from skimage.io._plugins.pil_plugin import pil_to_ndarray, ndarray_to_pil
 
 #from dataset import Dataset, Split, SplitDataset, get_lr_transform, get_hr_transform
-from model import LapSRN
+from models.lap_srn import LapSRN
 
 def upsample_tensor(model, lr, return_time=False, to_normalize=False):      
     mean=np.array([0.485, 0.456, 0.406])
