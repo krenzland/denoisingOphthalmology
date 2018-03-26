@@ -40,12 +40,13 @@ def save_checkpoint(epoch, generator, discriminator, optimizer_generator, optimi
 def train(epoch, generator, gan, criterion, optimizer_generator, writer, train_data):
     use_adversarial = gan is not None
     
-    cum_image_loss = 0.0
-    cum_loss = 0.0
+    cum_image_loss = Variable(torch.zeros(1).cuda()) #0.0
+    cum_loss = Variable(torch.zeros(1).cuda())#0.0
     if use_adversarial:
         cum_critic_loss = 0.0
         cum_adversarial_loss = 0.0
         
+    start = time.perf_counter()
     for it, batch in enumerate(train_data):
         # TODO: Only if using saliency loss.
         imgs, saliencies = batch
@@ -57,7 +58,7 @@ def train(epoch, generator, gan, criterion, optimizer_generator, writer, train_d
             critic_loss = gan.update(generator=generator,
                                      lr=lr,
                                      hr4=ground_truth[-1])           
-            cum_critic_loss += critic_loss.data[0]
+            cum_critic_loss += critic_loss
 
         optimizer_generator.zero_grad()
         out = generator(lr)
@@ -66,39 +67,41 @@ def train(epoch, generator, gan, criterion, optimizer_generator, writer, train_d
         if len(saliencies) > 0:
             loss_hr = [criterion(a, b, saliency) for (a,b, saliency) in zip(out, ground_truth, saliencies)]
         else:
-            loss_hr =[criterion(a, b) for (a,b) in zip(out, ground_truth)] 
+            loss_hr = [criterion(a, b) for (a,b) in zip(out, ground_truth)] 
 
         if use_adversarial:
             adversarial_loss = gan.get_generator_loss(hr4_hat=out[-1])
-            cum_adversarial_loss += adversarial_loss.data[0]
+            cum_adversarial_loss += adversarial_loss
         else:
             adversarial_loss = 0.0
-        # TODO: Generalise
+
         image_loss = sum(loss_hr)
-        cum_image_loss += image_loss.data[0]
+        cum_image_loss += image_loss
 
         loss = image_loss + adversarial_loss
-        cum_loss += loss.data[0]
+        cum_loss += loss
         
         loss.backward()
         optimizer_generator.step()
         
         if ((it + 1)% (len(train_data)//10) == 0):
-            print("Epoch={}, Batch={}/{}, Avg. loss = {}".format(epoch, it + 1, len(train_data),
-                                                                 cum_loss/(it+1)))
+            print("Epoch={}, Batch={}/{}".format(epoch, it + 1, len(train_data)))
+            
+    end = time.perf_counter()
+    print("Epoch took {:2.3f}s (train)".format(end-start))
     print("Epoch={}, image loss={}, total Loss={}".format(
         epoch,
-        cum_image_loss/len(train_data),
-        cum_loss/len(train_data)))
-    writer.add_scalar('data/image_loss', cum_image_loss/len(train_data), epoch)
-    writer.add_scalar('data/total_loss', cum_loss/len(train_data), epoch)
+        cum_image_loss.data[0]/len(train_data),
+        cum_loss.data[0]/len(train_data)))
+    writer.add_scalar('data/image_loss', cum_image_loss.data[0]/len(train_data), epoch)
+    writer.add_scalar('data/total_loss', cum_loss.data[0]/len(train_data), epoch)
 
     if use_adversarial:
         print("Negative critic loss = {}, Adversarial loss={}".format(
-            -cum_critic_loss/len(train_data),
-            cum_adversarial_loss/len(train_data)))
-        writer.add_scalar('data/neg_critic_loss', -cum_critic_loss/len(train_data), epoch)
-        writer.add_scalar('data/adversarial_loss', cum_adversarial_loss/len(train_data), epoch)
+            -cum_critic_loss.data[0]/len(train_data),
+            cum_adversarial_loss.data[0]/len(train_data)))
+        writer.add_scalar('data/neg_critic_loss', -cum_critic_loss.data[0]/len(train_data), epoch)
+        writer.add_scalar('data/adversarial_loss', cum_adversarial_loss.data[0]/len(train_data), epoch)
  
 def validate(epoch, generator, gan, criterion, writer, validation_data):
     use_adversarial = gan is not None
@@ -334,6 +337,7 @@ def main():
 
     for epoch in range(start_epoch, args.num_epochs+1):
         print("Started epoch num={}.".format(epoch))
+        start = time.perf_counter()
         scheduler_generator.step()
         scheduler_discriminator.step()
         print('Learning rate is {:.7E}'.format(optimizer_generator.param_groups[0]['lr']))
@@ -348,6 +352,9 @@ def main():
             checkpoint_name = str(Path(args.checkpoint_dir) / 'srn_{}.pt'.format(epoch))
             print("Wrote checkpoint {}!".format(checkpoint_name))
             save_checkpoint(epoch, generator, discriminator, optimizer_generator, optimizer_discriminator, checkpoint_name, args.adversarial)
+
+        end = time.perf_counter()
+        print("Epoch took {:2.3f}s (total)".format(end-start))
 
 if __name__ == '__main__':
     main()
