@@ -22,7 +22,9 @@ from models.patch_discriminator import PatchD
 from loss import CharbonnierLoss, CombinedLoss, SaliencyLoss, make_vgg16_loss
 from gan import GAN
 
-from dataset import Dataset, Split, SplitDataset, HrTransform, LrTransform
+# Data handling
+from dataset import Dataset, Split, SplitDataset
+from augmentations import HrTransform, LrTransform
 
 def save_checkpoint(epoch, generator, discriminator, optimizer_generator, optimizer_disc, filename, use_adversarial):
     state = {
