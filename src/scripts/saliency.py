@@ -20,9 +20,8 @@ def extend_mask(mask, extend_by=1):
 def compute_curvature(arr, deriv='gaussian'):
     # http://www0.cs.ucl.ac.uk/staff/S.Arridge/teaching/ndsp/imcurvature.m
     # Note: Individual derivatives might be exchanged, doesn't matter for curvature though!
-    deriv = 'gaussian'
     if deriv == 'gaussian':
-        sigma=1
+        sigma = 1.5
         img_dx = ndimage.gaussian_filter(arr, order=[1,0], sigma=sigma)
         img_dy = ndimage.gaussian_filter(arr, order=[0,1], sigma=sigma)
         img_dxx = ndimage.gaussian_filter(arr, order=[2,0], sigma=sigma)
@@ -39,23 +38,14 @@ def compute_curvature(arr, deriv='gaussian'):
         img_dyx = ndimage.convolve(img_dy, sobel)
 
     gradient_magnitude = np.sqrt(img_dx**2 + img_dy**2)
-    curvature = 1.0/gradient_magnitude
 
-    invalid = (arr <= 0.0) | (gradient_magnitude == 0.0)
-    curvature[invalid] = 0.0
-
-    # mask is true where grad is possibly zero
-    mask = np.zeros_like(invalid, dtype=bool)
-    mask[invalid] = True
-
-    #mask1 = extend_mask(mask)
-    mask2 = extend_mask(mask, extend_by=2)
+    invalid = (arr <= (10/255)) | (gradient_magnitude == 0.0)
 
     curvature = img_dy**2 * img_dxx - img_dx * (img_dxy + img_dyx) * img_dy + img_dx**2 * img_dyy
-    curvature[~mask2] = curvature[~mask2] / gradient_magnitude[~mask2]**3
-    curvature[mask2] = 0.0
-    
-    return curvature.clip(0,1)
+    curvature[~invalid] = curvature[~invalid] / gradient_magnitude[~invalid]**3
+    curvature[invalid] = 0
+        
+    return curvature.clip(0, 1)
 
 @numba.stencil(neighborhood=((-3, 3),(-3,3)), cval=-42.0)
 def entropy_kernel(hist):
@@ -87,7 +77,7 @@ def compute_entropy(arr):
     arr = np.pad(arr, pad_width=pad_width, mode='reflect')
     
     # Discretise intensity using edges.
-    hist = np.digitize(arr, edges, right=True).clip(0, len(edges)-2) # interval should be open on both ends
+    hist = np.digitize(arr, edges, right=False).clip(0, len(edges)-2) # interval should be open on both ends
     entr = entropy_kernel(hist)
     
     # Remove padding
@@ -148,17 +138,12 @@ def saliency(img):
     arr = color.rgb2gray(np.array(img))
     arr = np.float32(arr)
 
-    # Ignore background
-    black = threshold_otsu(arr)
-    black = arr < black
-
     curvature = compute_curvature(arr)
     entropy = compute_entropy(arr)
     uniq_curv = uniqueness(curvature) 
     uniq_entr =  uniqueness(1.0-entropy)
     
     saliency = 0.4 * uniq_curv + 0.6 * uniq_entr
-    saliency[black] = 0.0
     saliency = Image.fromarray(saliency*255.0).convert('RGB')
     return saliency
 
