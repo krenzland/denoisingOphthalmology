@@ -19,7 +19,7 @@ from models.lap_srn import LapSRN
 from models.patch_discriminator import PatchD
 
 # Loss functions
-from loss import CharbonnierLoss, CombinedLoss, SaliencyLoss, make_vgg16_loss
+from loss import CharbonnierLoss, CombinedLoss, SaliencyLoss, make_vgg16_loss, WeightedLoss
 from gan import GAN
 
 # Data handling
@@ -117,7 +117,6 @@ def validate(epoch, generator, gan, criterion, writer, validation_data):
     
     for batch in validation_data:
         # Need no gradient here!
-        # TODO: Only if saliency!
         imgs, saliencies = batch
         lr, *ground_truth = [Variable(b, volatile=True).cuda(async=True) for b in imgs]
         saliencies = [Variable(s, volatile=True).cuda(async=True) for s in saliencies]
@@ -199,14 +198,20 @@ def main():
                         help="Set batch size. Default: 32")
     parser.add_argument('--num-epochs', type=int, default=6667*2,
                         help="Set number of epochs. Default: 6667*2")
-    parser.add_argument('--perceptual', action='store_true',
-                        help="If true, use perceptual loss.")
-    parser.add_argument('--adversarial', action='store_true',
-                        help="If true, use adversarial loss.")
+    # ------------------ Loss functions ------------------------------------------
+    parser.add_argument('--mse', type=float, default=0.0,
+                        help="Set weight of mse loss. Default=0.0")
+    parser.add_argument('--l1', type=float, default=0.0,
+                        help="Set weight of l1 loss. Default=0.0")
+    parser.add_argument('--saliency', type=float, default=0.0,
+                        help="Set weight of saliency loss. Default=0.0")
+    parser.add_argument('--perceptual', type=float, default=0.0,
+                        help="Set weight of perceptual loss. Default=0.0")
+    parser.add_argument('--adversarial', type=float, default=0.0,
+                        help="Set weight of adversarial loss. Default=0.0")
     parser.add_argument('--wgan', action='store_true', dest='use_wgan',
                         help="If true, use wgan-gp instead of standard GAN.")
-    parser.add_argument('--adversarial-weight', type=float, default=1.0,
-                         help="Sets weight of adversarial loss. Default: 1.0")
+    # ------------------ Directories ----------------------------------------------
     # Directories
     parser.add_argument('--data-dir', default='../data/processed/messidor',
                         help="Sets tensorboard run directory, default ../data/processed/messidor")
@@ -218,7 +223,7 @@ def main():
     parser.add_argument('--checkpoint-every', type=int, default=333,
                         help="Sets how often a checkpoint gets written. Default: 333")
 
-    global args # todo: remove global?s
+    global args # todo: remove global?
     args = parser.parse_args()
     print("Called with args={}".format(args))
 
@@ -243,7 +248,7 @@ def main():
             generator = UNet(num_classes=3).cuda().train()
 
     print(generator)
-    if args.adversarial:
+    if args.adversarial > 0.0:
         if args.use_wgan:
             discriminator = PatchD(use_sigmoid=False, num_layers=4).cuda().train()
         else:
@@ -254,7 +259,7 @@ def main():
         discriminator = None
 
     # Setup optimizers
-    if args.adversarial:
+    if args.adversarial > 0:
         if args.use_wgan:
             optimizer_generator = optim.Adam(generator.parameters(), betas=(0.0, 0.9), lr=args.lr)
             optimizer_discriminator = optim.Adam(discriminator.parameters(), betas=(0.0, 0.9), lr=args.lr)
@@ -266,18 +271,27 @@ def main():
         optimizer_discriminator = None
 
     # Set up losses
-    if args.perceptual:
-        criterion = make_vgg16_loss(nn.MSELoss().cuda()).cuda()
-    else:
-        criterion = CharbonnierLoss().cuda()
+    criterions = []
+    if args.mse > 0.0:
+        criterions.append(WeightedLoss(nn.MSELoss().cuda(), args.mse))
+    if args.l1 > 0.0:
+        criterions.append(WeightedLoss(CharbonnierLoss().cuda(), args.l1))
+    if args.saliency > 0.0:
+        criterions.append(WeightedLoss(SaliencyLoss().cuda(), args.saliency))
+    if args.perceptual > 0.0:
+        criterions.append(WeightedLoss(make_vgg16_loss(nn.MSELoss().cuda()).cuda(),
+                                       args.perceptual))
+                          
+    # Combine all losses into one.
+    assert(len(criterions) > 0)
+    print(criterions)
+    criterion = CombinedLoss(criterions).cuda()
 
-    sal_loss = SaliencyLoss().cuda()
-    criterion = CombinedLoss([criterion]).cuda()
-
-    if args.adversarial:
+    # Handle adversarial loss seperately (backprob not trivial)
+    if args.adversarial > 0.0:
         gan = GAN(discriminator=discriminator,
                   optimizer=optimizer_discriminator,
-                  adversarial_weight=args.adversarial_weight,
+                  adversarial_weight=args.adversarial,
                   use_wgan=args.use_wgan)
     else:
         gan = None
@@ -286,17 +300,21 @@ def main():
     if args.checkpoint:
         checkpoint = torch.load(args.checkpoint)
         generator.load_state_dict(checkpoint['model_state'])
-        optimizer_generator.load_state_dict(checkpoint['optim_state'])
         start_epoch = checkpoint['epoch']
         if args.adversarial:
             if 'optim_state_optimizer' in checkpoint:
+                optimizer_generator.load_state_dict(checkpoint['optim_state'])
                 optimizer_discriminator.load_state_dict(checkpoint['optim_state_optimizer'])
             else:
                 print("Warning: Only loading generator from checkpoint!")
                 print("Resetting epoch to 0 and learning rates to --lr argument.")
+                print("Resetting optimizer for generator completely.")
                 start_epoch = 0
                 for param_group in optimizer_generator.param_groups:
                     param_group['lr'] = args.lr
+        else:
+            optimizer_generator.load_state_dict(checkpoint['optim_state'])
+            
                 
         print("Model succesfully loaded from checkpoint")
     else:
@@ -325,7 +343,7 @@ def main():
     dataset = Dataset(args.data_dir,
                       hr_transform=hr_transform,
                       lr_transform=lr_transform,
-                      use_saliency=False,
+                      use_saliency=True,
                       verbose=True)
     train_dataset = SplitDataset(dataset, Split.TRAIN, 0.8) 
     validation_dataset = SplitDataset(dataset, Split.TEST, 0.8)

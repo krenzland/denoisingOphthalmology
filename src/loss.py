@@ -19,6 +19,8 @@ class CharbonnierLoss(nn.Module):
         e = torch.sqrt(d**2 + self.eps)
         return torch.mean(e)
 
+WeightedLoss = namedtuple("LossWeight", ['loss', 'weight'])
+
 class SaliencyLoss(nn.Module):
     def __init__(self, eps=1e-6):
         """
@@ -40,11 +42,11 @@ class CombinedLoss(nn.Module):
 
     def forward(self, x, y, saliencies=None):
         total = 0.0
-        for crit in self.criterions:
-            if isinstance(crit, SaliencyLoss):
-                total += 25 * crit(x,y, saliencies) # TODO: Set weight!
+        for loss in self.criterions:
+            if isinstance(loss.loss, SaliencyLoss):
+                total += loss.weight * loss.loss(x,y, saliencies)
             else:
-                total += crit(x,y)
+                total += loss.weight * loss.loss(x,y)
         return total
 
 # Specifies which layers we want to use for our loss
@@ -93,8 +95,8 @@ class PerceptualLoss(nn.Module):
             actX = getattr(featX, layer_name) 
             actY = getattr(featY, layer_name)
             # normalize all activations to mean 1
-            actX = (actX - actX.mean()) + 1.0
-            actY = (actY - actY.mean()) + 1.0
+            #actX = (actX - actX.mean()) + 1.0
+            #actY = (actY - actY.mean()) + 1.0
             layer_loss = self.criterion(actX, actY)
             content_loss += weight * layer_loss
             

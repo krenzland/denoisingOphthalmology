@@ -64,13 +64,13 @@ class GAN(object):
         for p in self.discriminator.parameters():
             p.requires_grad = True
 
-        NUM_CRITIC_ITERS = 5
         cum_critic_loss = 0.0
 
         # Freeze generator here
         input_lr = Variable(lr.data, volatile=True)
 
         # Compute fake data
+        # TODO: Why compute it twice?
         hr4_hat = generator(input_lr)[-1]
         # Remove volatile from output
         hr4_hat = Variable(hr4_hat.data)    
