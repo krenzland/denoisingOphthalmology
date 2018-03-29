@@ -21,7 +21,7 @@ def compute_curvature(arr, deriv='gaussian'):
     # http://www0.cs.ucl.ac.uk/staff/S.Arridge/teaching/ndsp/imcurvature.m
     # Note: Individual derivatives might be exchanged, doesn't matter for curvature though!
     if deriv == 'gaussian':
-        sigma = 1.5
+        sigma = 1
         img_dx = ndimage.gaussian_filter(arr, order=[1,0], sigma=sigma)
         img_dy = ndimage.gaussian_filter(arr, order=[0,1], sigma=sigma)
         img_dxx = ndimage.gaussian_filter(arr, order=[2,0], sigma=sigma)
