@@ -192,12 +192,12 @@ def main():
     parser.add_argument('--depth', type=int, default=10,
                         help="Set number of convolution layers for each feature extraction stage.")
     # ------------------ Optimizer settings ---------------------------------------
-    parser.add_argument('--lr', type=float, default=1e-5,
-                        help="Value for learning rate. Default: 1e-5")
+    parser.add_argument('--lr', type=float, default=1e-3,
+                        help="Value for learning rate. Default: 1e-3")
     parser.add_argument('--batch-size', type=int, default=64,
                         help="Set batch size. Default: 32")
-    parser.add_argument('--num-epochs', type=int, default=6667*2,
-                        help="Set number of epochs. Default: 6667*2")
+    parser.add_argument('--num-epochs', type=int, default=3333*4,
+                        help="Set number of epochs. Default: 3333*4")
     # ------------------ Loss functions ------------------------------------------
     parser.add_argument('--mse', type=float, default=0.0,
                         help="Set weight of mse loss. Default=0.0")
@@ -321,8 +321,8 @@ def main():
         start_epoch = 0
 
     # After 10e5 gradient updates lower LR once.
-    scheduler_generator = lr_scheduler.StepLR(optimizer_generator, step_size=6667, gamma=0.1, last_epoch = start_epoch - 1)
-    scheduler_discriminator = lr_scheduler.StepLR(optimizer_generator, step_size=6667, gamma=0.1, last_epoch = start_epoch - 1)
+    scheduler_generator = lr_scheduler.StepLR(optimizer_generator, step_size=3333, gamma=0.1, last_epoch = start_epoch - 1)
+    scheduler_discriminator = lr_scheduler.StepLR(optimizer_generator, step_size=3333, gamma=0.1, last_epoch = start_epoch - 1)
 
     # Set needed data transformations.
     CROP_SIZE = 128 # is 128 in paper
