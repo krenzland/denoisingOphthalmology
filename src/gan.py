@@ -41,6 +41,9 @@ class GAN(object):
         return grad_penalty
 
     def get_discriminator_loss(self, hr4, hr4_hat):
+        # Deactivate norm layers
+        self.discriminator.eval()
+        
         # Train with real data (= hr4)
         discriminator_real = self.discriminator(hr4)
 
@@ -57,12 +60,14 @@ class GAN(object):
         else:
             discriminator_loss = (-torch.log(discriminator_real) - torch.log(1 - discriminator_fake)).mean()
 
+        self.discriminator.train()
         return discriminator_loss
 
     def update(self, generator, lr, hr4):       
         # Unfreeze weights of critic
         for p in self.discriminator.parameters():
             p.requires_grad = True
+        self.discriminator.train()
 
         cum_critic_loss = 0.0
 
@@ -70,7 +75,6 @@ class GAN(object):
         input_lr = Variable(lr.data, volatile=True)
 
         # Compute fake data
-        # TODO: Why compute it twice?
         hr4_hat = generator(input_lr)[-1]
         # Remove volatile from output
         hr4_hat = Variable(hr4_hat.data)    
@@ -90,11 +94,13 @@ class GAN(object):
         # Freeze weights of critic for efficiency
         for p in self.discriminator.parameters():
             p.requires_grad = False
+        self.discriminator.eval()
 
         if self.use_wgan:
             generator_loss = -self.discriminator(hr4_hat).mean()
         else:
             generator_loss = -torch.log(self.discriminator(hr4_hat)).mean()
+        self.discriminator.train()
 
         return self.adversarial_weight * generator_loss
 
