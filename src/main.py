@@ -196,7 +196,7 @@ def main():
                         help="Value for learning rate. Default: 1e-3")
     parser.add_argument('--batch-size', type=int, default=64,
                         help="Set batch size. Default: 32")
-    parser.add_argument('--num-epochs', type=int, default=3333*4,
+    parser.add_argument('--num-epochs', type=int, default=3333*3,
                         help="Set number of epochs. Default: 3333*4")
     # ------------------ Loss functions ------------------------------------------
     parser.add_argument('--mse', type=float, default=0.0,
