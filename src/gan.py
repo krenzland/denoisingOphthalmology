@@ -41,9 +41,6 @@ class GAN(object):
         return grad_penalty
 
     def get_discriminator_loss(self, hr4, hr4_hat):
-        # Deactivate norm layers
-        self.discriminator.eval()
-        
         # Train with real data (= hr4)
         discriminator_real = self.discriminator(hr4)
 
@@ -59,8 +56,6 @@ class GAN(object):
             discriminator_loss = -wasserstein_distance + gradient_penalty
         else:
             discriminator_loss = (-torch.log(discriminator_real) - torch.log(1 - discriminator_fake)).mean()
-
-        self.discriminator.train()
         return discriminator_loss
 
     def update(self, generator, lr, hr4):       
@@ -94,13 +89,11 @@ class GAN(object):
         # Freeze weights of critic for efficiency
         for p in self.discriminator.parameters():
             p.requires_grad = False
-        self.discriminator.eval()
 
         if self.use_wgan:
             generator_loss = -self.discriminator(hr4_hat).mean()
         else:
             generator_loss = -torch.log(self.discriminator(hr4_hat)).mean()
-        self.discriminator.train()
 
         return self.adversarial_weight * generator_loss
 
