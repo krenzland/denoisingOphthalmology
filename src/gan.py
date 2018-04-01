@@ -9,6 +9,13 @@ class GAN(object):
         self.adversarial_weight = adversarial_weight
         self.use_wgan = use_wgan
         self.critic_iterations = 5 if use_wgan else 1
+        if not use_wgan:
+            self.bce_loss = torch.nn.BCEWithLogitsLoss()
+            self.label_real, self.label_fake = Variable(torch.ones(0)).cuda(),Variable(torch.ones(0)).cuda()  
+            
+    def create_targets(self, shape):
+        self.label_real = Variable(torch.ones((shape))).cuda()
+        self.label_fake = Variable(torch.zeros((shape))).cuda()
 
     def get_gradient_penalty(self, real_data, fake_data):
         # Only for WGAN-GP!
@@ -42,10 +49,10 @@ class GAN(object):
 
     def get_discriminator_loss(self, hr4, hr4_hat):
         # Train with real data (= hr4)
-        discriminator_real = self.discriminator(hr4)
+        discriminator_real = self.discriminator(hr4, use_sigmoid=False)
 
         # Train with fake data (= hr4_hat)
-        discriminator_fake  = self.discriminator(hr4_hat)
+        discriminator_fake  = self.discriminator(hr4_hat, use_sigmoid=False)
 
         if self.use_wgan:
             # Train with gradient penalty
@@ -55,11 +62,15 @@ class GAN(object):
             wasserstein_distance = discriminator_real.mean() - discriminator_fake.mean()
             discriminator_loss = -wasserstein_distance + gradient_penalty
         else:
-            discriminator_loss = (-torch.log(discriminator_real) - torch.log(1 - discriminator_fake)).mean()
+            if self.label_real.shape != discriminator_real.shape:
+                self.create_targets(discriminator_real.shape)
+            loss_real = self.bce_loss(discriminator_real, self.label_real)
+            loss_fake = self.bce_loss(discriminator_fake, self.label_fake)
+            discriminator_loss =  loss_real + loss_fake
         return discriminator_loss
 
     def update(self, generator, lr, hr4):       
-        # Unfreeze weights of critic
+        # Unfreeze weights of critc
         for p in self.discriminator.parameters():
             p.requires_grad = True
         self.discriminator.train()
@@ -91,9 +102,10 @@ class GAN(object):
             p.requires_grad = False
 
         if self.use_wgan:
-            generator_loss = -self.discriminator(hr4_hat).mean()
+            generator_loss = -self.discriminator(hr4_hat, use_sigmoid=False).mean()
         else:
-            generator_loss = -torch.log(self.discriminator(hr4_hat)).mean()
+            # Switch labels here!
+            generator_loss = self.bce_loss(self.discriminator(hr4_hat, use_sigmoid=False), self.label_real)
 
         return self.adversarial_weight * generator_loss
 

@@ -60,7 +60,9 @@ class PatchD(nn.Module):
         ]
         
         if use_sigmoid:
-            layers += [nn.Sigmoid()]
+            self.out = nn.Sigmoid()
+        else:
+            self.out = lambda x: x
             
         self.layers = nn.Sequential(*layers)            
         
@@ -70,6 +72,9 @@ class PatchD(nn.Module):
                 m.weight.data.normal_(0.0, 0.02)
                 m.bias.data.fill_(0.0)
 
-    def forward(self, x):
+    def forward(self, x, use_sigmoid):
         # Return one number per input image.
-        return self.layers(x).view(x.size(0),-1).mean(dim=1)
+        x = self.layers(x)
+        if use_sigmoid:
+            x = self.out(x)
+        return x.view(x.size(0),-1)
