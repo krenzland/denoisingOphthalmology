@@ -7,13 +7,17 @@
  \usepackage[%
    backend=biber]{biblatex}
  \addbibresource{../bibliography.bib}
-\usepackage[final]{microtype}
+
+\usepackage[final,tracking=smallcaps,expansion=alltext, protrusion=true]{microtype}
+\SetTracking{encoding=*, shape=sc}{50} %latex & friends, page 52
 \usepackage{todonotes}
 \usepackage{caption}
 \usepackage{booktabs}
 \usepackage{subcaption}
 \usepackage{bm}
 \usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
 \usepackage{mathtools} % for \mathclap
 \usepackage{hyperref}
 \usepackage[noabbrev]{cleveref}
@@ -151,26 +155,81 @@ Our model differs in two ways from the original architecture:
 \begin{itemize}
 \item We use three-channel \textsc{rgb} images both as input and output instead of working only on the Y-channel.
 \item Instead of transposed convolutions we use resize-convolution blocks.
-  They are composed of a nearest neighbour interpolation and a standard convolution filter.
+  They are composed of a nearest neighbour interpolation, a reflect-pad of size one and a standard convolution filter.
   Empirical evidence suggest that they lead to fewer interpolation artefacts than transposed convolution, especially when they are used in a \textsc{gan} framework\cite{deconvolution}.
 \end{itemize}
+The resulting architecture can be seen in figure xx.
+All convolutions have three kernels, stride one and padding one.
+
+For the deblurring case, the upsampling block is removed from the feature extraction pipeline.
+Additionally, the image reconstruction stage is replaced by the blurred high-resolution images.
+We thus use a similar architecture and keep the residual learning and the stepwise(?) reconstruction.
 
 We use the PatchGan discriminator presented in~\cite{PatchGAN}.
 This is a fully convolutional discriminator that penalizes on a basis $70\times70$ patches.
 In our case this can be interpreted as a very coarse texture loss.
 
-\section{Loss functions}
-We use a combination of a saliency-weighted L1-loss, an perceptual loss and an adversarial loss for our experiments.
 
-The Charbonnier-Loss is defined by
-\begin{align}
-\label{eq:charbonnier}
-    L( \hat{\bm{y}}, \bm{y}; \bm{\theta}) = \sum_n p \left( \bm{\hat{y}} - \bm{y} \right),
-    \intertext{with }
-    p(\bm{x}) = \sqrt{ \langle x, x \rangle  + \epsilon^2},
-\end{align}
-where $\varepsilon$ is a parameter set to $1e-6$ for our experiments.
-This is a differentiable approximation of the $L_1$ loss which leads to sharper edges compared to a standard \textsc{mse}-loss.
+\section{Loss functions}
+In this work we combine three loss functions:
+A saliency weighted $L_1$-loss ensures the faithful reconstruction of important areas, a perceptual loss optimises visual similarity and an adversarial loss reconstructs high-frequency image components.
+This ensemble of loss functions is inspired by~\cite{SaliencyGAN}
+
+While the images in standard super-resolution tasks do not share a lot of common structure, retinal fundus images are visually similar to each other.
+This can be used to create hand-crafted saliency maps, that highlight relevant pixels.
+We use maps that are similar to the ones of~\cite{SaliencyGAN}.
+These saliency map consists of two components: the curvature and local entropy.
+
+The isophote curvature highlights fine structure in the image and can be computed as
+\newcommand{\img}{\mathrm{img}} % TODO: Format
+\begin{equation}
+ I_c = \frac{\img_{xx} \img_y^2 + f_{yy} \img_x^2 - 2 \img_{x} \img_{xy} \img_{y} }{(\img_x^2 + \img_y^2)^{1.5}},
+\end{equation}
+where \(\img\) is the intensity of the image and its subscript represents its derivatives.
+A derivation and discussion of this curvature function can be found in~\cite{Curvature}.
+We approximate the image derivatives by convolving the image with the derivative of Gaussians with \(\sigma = 1.5\).
+
+The local entropy highlights pixels that are in a neighborhood that contain more information.
+We compute the entropy for each pixel by
+\begin{equation}
+  \label{eq:entr}
+  I_e = - \sum_{s \in P_s} p(s_i) \log(p(s_i)),
+\end{equation}
+where \(p\) is the probability that a pixel \(s\) has an intensity of \(s_i\) in a patch \(P_s\).
+The probability $p(s_i)$ is estimated by a normalised histogram with eight bins of equal size, computed for each patch seperately.
+A patch is composed of the pixel itself and its surrounding neighborhood of size \(7 \times 7\).
+We then convolve the image with a Gaussian filter with \(\sigma = 0.5\) to remove high-frequency noise.
+Finally we normaliuue $I_e$ such that it is in the range \([0, 1]\) and use $1 - I_e$ for our saliency map.
+This highlights compact regions of the image.
+
+We then compute the uniqueness of each pixel of a feature map \(f\) with the function
+\begin{equation}
+  \label{eq:uniq}
+  U(f) = \sum_{o \in P_c} w(c, o) \vert f(c) - f(o) \vert,
+\end{equation}
+where \(c\) corresponds to the pixel in the middle of a patch \(P_c\) of size \(7 \times 7\).
+The function \(w(a,b) = \exp(d(a, b))\) weights the pixels by their Euclidean distance \(d\).
+Pixels that are farther away from the center have a smaller influence on the uniqueness.
+All uniqueness maps are normalized to the range \([0,1]\).
+
+Finally, we combine the uniqueness maps of both components linearly
+\begin{equation}
+  \label{eq:saliency}
+  I_{sal} = 0.4 \cdot U(I_c) + 0.6 \cdot U(1 - I_e)
+\end{equation}
+to obtain the saliency map for each image.
+
+We then use this map to weigh the pixel-wise error.
+We propose a weighted version of the Charbonnier loss\todo{Cite charbonnier loss}
+\todo{define weighted l1 loss}
+% \begin{align}
+% \label{eq:charbonnier}
+%     L( \hat{\bm{y}}, \bm{y}; \bm{\theta}) = \sum_n p \left( \bm{\hat{y}} - \bm{y} \right),
+%     \intertext{with }
+%     p(\bm{x}) = \sqrt{ \bm{x}^{\intercal} \bm{x}  + \varepsilon},
+% \end{align}
+% where $\varepsilon$ is a parameter set empirically to $1e-6$ for our experiments.
+It is a derivable\todo{correct word here?} approximation of the $L_1$ loss which leads to sharper edges compared to a standard \textsc{mse}-loss.
 Additionally, results for our chosen architecture indicate that choosing this loss leads to a faster convergence~\cite{LapSRN}.
 
 Secondly, we use a perceptual loss.
@@ -180,55 +239,115 @@ This loss can be defined for an arbitrary filter map as
   \label{eq:perceptual-loss}
   L_p = \Vert \phi( \bm{\hat{y}} ) - \phi (\bm{y}) \Vert_2^2 .
 \end{equation}
-We use filter maps $\phi$ taken from the pooling layers of a pre-trained VGG-19 network.
+We use filter maps $\phi$ taken from the pooling layers of a pre-trained VGG-16~\cite{Vgg} network.
 This leads to visually better images but decreased PSNR.
 See~\cite{PerceptualLoss} for motivation and details.
 
-While the images in standard super-resolution tasks do not share a lot of common structure, retinal fundus images are visually similar to each other.
-This can be used to create hand-crafted filters.
-We use the saliency maps of~\cite{SaliencyGAN}.
-They combine the curvature of the images and the entropy of pixels.
-
-As a final building block we use an adversarial loss.
+We use an adversarial loss as our final building block.
 Training the model now resembles a two-player game between a generator an a discriminator network.
 The discriminator tries to decide, whether an image is a ground-truth high-resolution image or an low resolution image that was upsampled by the generator.
+The generator is trained to fool the discriminator.
 This is realized as the optimization problem~\cite{GAN}
 \begin{align}
-  \cdots.
+ \min_G \max_D \mathbb{E}_{x \sim P_r} \left[ \log (D({x})) \right] +
+  \mathbb{E}_{\hat{\bm{x}} \sim P_g} \left[  \log (1 - D(\hat{\bm{x}})) \right]
 \end{align}
-To improve numerical stability, the discriminator optimizes \(\cdots\) instead.
+To improve stability, the generator minimizes
+\( - \mathbb{E}_{\hat{\bm{x}} \sim P_g} \left[ \log (D(\hat{\bm{x}})) \right]\)
+
+instead.
+The patch-discriminator does not predict a single probablity per image but rather one per image patch.
+Thus, the probability distributions $P_r$ and $P_g$ correspond to the distribution of real high-resolution patches and super-resolved patches respectively.
+This discriminator design is able to discover high-frequency image details while relying on the other two losses for low-frequency content~\cite{PatchGAN}.
 
 The first implementation that used an adversarial loss for single-image super-resolution was~\cite{SRGAN} which resulted in visually pleasing images.
 \todo{Describe imagined artefacts?}
 \todo{Only standard GAN? or also wgan?}
 
-\section{Training}
+\section{Implementation \textit{\&} Training}
 We use the Messidor dataset~\cite{Messidor} which consists of 1200 high resolution fundus images.
 We used 80\% of the dataset for training, the rest was used for validation.
-The images were augmented by random horicontally and vertically flips, scaling by a factor between $0.5$ and $1.0$ and rotation by 0, 90, 180 or 270 degrees \todo{check rotation}.
-As a last augmentation, a random crop of size 128 is chosen.
+The images were augmented by random horicontal and vertical flips, a random scaling by a factor between $0.5$ and $1.0$ and a rotation by 0, 90, 180 or 270 degrees, similar as in~\cite{LapSRN}.
+We then choose a random crop of size $128 \times 128$ by rejection sampling:
+If a crop contains too many black pixels or no vessels it is rejected and another crop is chosen.
+The vessels are detected using a pre-computed Frangi filter.
+As a final augmentation we add specular reflections with a probability of $25\%$.
+This is simulated by increasing the intensity of the image in a circular mask (post-processed with a Gaussian filter) by a random intensity.
+The specular reflection mirror the usage of light sources during operations.
+
+We then obtain low resolution images using bicubic downsampling followed by Gaussian blur with a radius uniformally distributed between $0.0$ and $2.0$.
+The blur is added completely to the low resolution image, the intermediate HR2 output is blurred with half of the blur strength.
+\todo{Explain how we distribute blur evenly?}
+\todo{Scaling by mean and variance}
 We try to sample crops that contain more information, to do this we reject crops which either contain too many black pixels or too few blood vessel pixels.
-The blood vessels are detected using a Frangi-filter \todo{cite frangi filter}.
+The blood vessels are detected using a Frangi-filter~\cite{Frangi}.
+Finally, images are converted to tensors of range 0 to 1 and scaled by subtracting
+\(
+\begin{bmatrix}
+ 0.485 & 0.456 & 0.406 
+\end{bmatrix}
+\)
+and dividing by
+\(
+\begin{bmatrix}
+0.229 & 0.224& 0.225
+\end{bmatrix}
+\).
+This is the normalisation that is expected from the pre-trained VGG-16 network.
+
 We use a batch size of $64$ for all experiments.
 
-Both networks are optimized by \textsc{adam}~\cite{adam} with an initial learning rate of $1r-4$.
-The generator is trained for $10^5$ gradient iterations, after this the learning rate is decreased to $1e-5$ and the network is trained for another $10^5$ iterations.
+Both networks are optimized by \textsc{adam}~\cite{Adam} with an initial learning rate of $1r-3$.
+\todo{Check if $10^4$ is really correct.}
+The generator is trained for $15 \times 10^4$ gradient iterations, the learning rate is divided by ten each $5 \times 10^4$ updates.
 We first train solely the generator without the adversarial loss.
-The resulting network is then used to initialise the adversarial training, which continues for another $10^5$ iterations.
+The resulting network is then used to initialise the adversarial training, which continues for another $15 \times 10^4$ iterations.
 We validate after every $1005$ update iterations.
 
-
-
 \section{Evaluation}
-...
-\todo{Cite SSIM}
+The evaluation of image restoration networks is difficult, as commonly used metric do not correlate with perceptual quality.
+We use the \textsc{mse}-based metric \textsc{psnr}, defined by
+\begin{equation}
+  \label{eq:psnr}
+  \cdots,
+\end{equation}
+to verify that individual pixels are faithfully restored.
+Additionally we use the metric \textsc{ssim}~\cite{Ssim}, which compares images with sliding windows (is that true?).
+
+For our chosen application, the correct reconstruction of image gradients is important, for example because we want to achieve a clear border between areas where the membrane still exists and other areas.
+To do this, we compute the gradient magnitude with a Sobel filter and compare the reconstruction.
+
+Similarly to~\cite{SaliencyGAN} we also use vessel segmentation as a proxy for perceptual quality.
+For this we use both a Frangi filter~\cite{Frangi}, which is a simple method that is not robust, and the retina-unet~\cite{RetinaUnet}.
+We evaluate this on the testing set of the DRIVE dataset~\cite{Drive}.
+
+Finally, we look at the visual quality of the upscaling of intraoperative pictures.
+These images differ strongly to the images seen by the network, it is thus an instance of transfer learning.
+
+We compare the super resolution network with bicubic interpolation.
+The deblurring network is compared to a standard U-Net architecture, trained with the same parameters as our network with \textsc{mse} loss.
+In the implementation that we are using, the feature maps for the skip connections are not cropped but rather padded such that they have the same shape.
+This is a common architecure for bio-medical applications and similar architectures have been used successfully as generators for image-translation tasks~\cite{PatchGAN}.
+The UNet was trained with the same optimizer configuration and an identical learing rate schedule.
+
+% \begin{table}[]
+% \centering
+% \caption{Some Results, all measured in \textsc{psnr}}
+
+% \label{tab:results-sr}
+% \begin{tabular}{@{}lllll@{}}
+% \toprule
+% Model          & PSNR  & SSIM & Sobel-\textsc{mse} & \textsc{auc} \\ \midrule
+% Full & 0.0 & 0.0 & 0.0 & 0.0 \\
+% \bottomrule
+% \end{tabular}
+% \end{table}
+
 \todo{PSNR table}
 \todo{Segmentation table, Frangi AND Retina-U-NEt}
-\todo{Cite retina unet (link)}
-\todo{Cite DRIVE database}
 \todo{Intraoperative evaluation}
 \section{Summary}
-...
+summary here
 
 \printbibliography
 \end{document}
