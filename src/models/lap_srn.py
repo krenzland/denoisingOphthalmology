@@ -63,7 +63,7 @@ class FeatureExtraction(nn.Module):
 
         if upsample:
             filters.add_module('resize_conv', ResizeConvolution(num_channels=64))
-        filters.add_module('lrelu_upsample', LReLu)                   
+            filters.add_module('lrelu_upsample', LReLu)                   
         
         self.seq = filters
         
