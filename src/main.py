@@ -329,15 +329,17 @@ def main():
     hr_transform = HrTransform(CROP_SIZE, random=True)
     if args.mode == 'sr':
         resize_factors = [2, 4]
+        max_blur = 2
     else:
         resize_factors = [1, 1] # no resizing here
+        max_blur = 3
     if args.model == 'UNet':
         resize_factors = resize_factors[-1:] # TODO !
 
     print(resize_factors)
     lr_transform = LrTransform(crop_size=CROP_SIZE,
                                factors=resize_factors,
-                               max_blur=2)
+                               max_blur=max_blur)
 
     # Load datasets and set transforms.
     dataset = Dataset(args.data_dir,

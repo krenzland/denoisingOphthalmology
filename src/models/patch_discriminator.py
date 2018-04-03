@@ -73,7 +73,7 @@ class PatchD(nn.Module):
                 m.bias.data.fill_(0.0)
 
     def forward(self, x, use_sigmoid):
-        # Return one number per input image.
+        # Return one number per patch
         x = self.layers(x)
         if use_sigmoid:
             x = self.out(x)
