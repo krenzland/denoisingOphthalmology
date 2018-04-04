@@ -18,6 +18,7 @@
 \usepackage{amsmath}
 \usepackage{amsfonts}
 \usepackage{amssymb}
+\usepackage{nicefrac}
 \usepackage{mathtools} % for \mathclap
 \usepackage{hyperref}
 \usepackage[noabbrev]{cleveref}
@@ -27,6 +28,7 @@
 \usepackage{tikz}
 \usetikzlibrary{arrows, positioning, shapes.geometric}
 \usetikzlibrary{calc}
+\newcommand{\img}{f} % TODO: Format
 
 \begin{document}
 \title{Deep-Learning-based Image Denoising in Ophthalmology}
@@ -145,11 +147,25 @@ Bicubic        & 28.42 & 26.1  & 25.96   \\ \bottomrule
 \end{tabular}
 \end{table}
 
+\section{Problem Statement}
+Our goal is to increase the resolution of retinal fundus images.
+We discuss two similar problems here:
+\begin{itemize}
+\item Increasing the spatial resolution of images.
+  We consider images with a low number of pixels and increase the number of pixels by a factor of 16.
+  In the literature, this problem is called single image super resolution.
+\item Denoising images.
+  For this case we try to increase the quality of images by removing blur.
+\end{itemize}
+
+
 \section{Architecture}
-We use an architecture that is similar to \textsc{LapSrn} presented in~\cite{LapSRN}.
-That means that we use a network consisting of two branches.
+We use a modified \textbf{LapSRN} architecture which was presented in~\cite{LapSRN}.
+The network utilises a Laplacian pyramid, it first performs 2x upscaling and then 4x upscaling.
+
+This architecture consists of two branches.
 The first branch is called \textbf{image reconstruction branch} and upscales the low resolution image using simple upscaling filters.
-The second branch extracts features from the low resolution image and predicts the \textbf{residual} for each upscaled image of the first branch.
+The second branch extracts features from the low resolution image using stacked convolutions and predicts the \textbf{residual} for each upscaled image of the first branch.
 
 Our model differs in two ways from the original architecture:
 \begin{itemize}
@@ -157,9 +173,11 @@ Our model differs in two ways from the original architecture:
 \item Instead of transposed convolutions we use resize-convolution blocks.
   They are composed of a nearest neighbour interpolation, a reflect-pad of size one and a standard convolution filter.
   Empirical evidence suggest that they lead to fewer interpolation artefacts than transposed convolution, especially when they are used in a \textsc{gan} framework\cite{deconvolution}.
+\item We only consider 4x upscaling here.
+  The approach presented here can be easily extended to larger upscaling ratios.
 \end{itemize}
 The resulting architecture can be seen in figure xx.
-All convolutions have three kernels, stride one and padding one.
+All convolutions in the generator have 64 $3 \times 3$ filters, a stride of one and a padding of one.
 
 For the deblurring case, the upsampling block is removed from the feature extraction pipeline.
 Additionally, the image reconstruction stage is replaced by the blurred high-resolution images.
@@ -181,13 +199,12 @@ We use maps that are similar to the ones of~\cite{SaliencyGAN}.
 These saliency map consists of two components: the curvature and local entropy.
 
 The isophote curvature highlights fine structure in the image and can be computed as
-\newcommand{\img}{\mathrm{img}} % TODO: Format
 \begin{equation}
  I_c = \frac{\img_{xx} \img_y^2 + f_{yy} \img_x^2 - 2 \img_{x} \img_{xy} \img_{y} }{(\img_x^2 + \img_y^2)^{1.5}},
 \end{equation}
 where \(\img\) is the intensity of the image and its subscript represents its derivatives.
 A derivation and discussion of this curvature function can be found in~\cite{Curvature}.
-We approximate the image derivatives by convolving the image with the derivative of Gaussians with \(\sigma = 1.5\).
+We approximate the image derivatives by convolving the image with the derivative of Gaussians with \(\sigma = 1\).
 
 The local entropy highlights pixels that are in a neighborhood that contain more information.
 We compute the entropy for each pixel by
@@ -215,22 +232,22 @@ All uniqueness maps are normalized to the range \([0,1]\).
 Finally, we combine the uniqueness maps of both components linearly
 \begin{equation}
   \label{eq:saliency}
-  I_{sal} = 0.4 \cdot U(I_c) + 0.6 \cdot U(1 - I_e)
+  I_{\text{sal}} = 0.4 \cdot U(I_c) + 0.6 \cdot U(1 - I_e)
 \end{equation}
 to obtain the saliency map for each image.
 
 We then use this map to weigh the pixel-wise error.
 We propose a weighted version of the Charbonnier loss\todo{Cite charbonnier loss}
 \todo{define weighted l1 loss}
-% \begin{align}
-% \label{eq:charbonnier}
-%     L( \hat{\bm{y}}, \bm{y}; \bm{\theta}) = \sum_n p \left( \bm{\hat{y}} - \bm{y} \right),
-%     \intertext{with }
-%     p(\bm{x}) = \sqrt{ \bm{x}^{\intercal} \bm{x}  + \varepsilon},
-% \end{align}
-% where $\varepsilon$ is a parameter set empirically to $1e-6$ for our experiments.
-It is a derivable\todo{correct word here?} approximation of the $L_1$ loss which leads to sharper edges compared to a standard \textsc{mse}-loss.
-Additionally, results for our chosen architecture indicate that choosing this loss leads to a faster convergence~\cite{LapSRN}.
+\begin{align}
+\label{eq:charbonnier}
+    L_{\text{sal}}( \hat{\bm{\img}}, \bm{\img}) = \sum_n p \left( \bm{\hat{\img}} - \bm{\img} \right),
+  \intertext{with }
+  \label{eq:charbonnier-p}
+    p(\bm{x}) = I_{\text{sal}} \cdot \sqrt{ \bm{x}^2 + \varepsilon},
+\end{align}
+where $\varepsilon$ is a parameter set empirically to $1e-6$ for our experiments and all mathematical operations in \cref{eq:charbonnier-p} are element-wise.
+It is a derivable\todo{correct word here?} approximation of the $L_1$ loss which leads to sharper edges compared to a standard \textsc{mse}-loss~\cite{LapSRN}.
 
 Secondly, we use a perceptual loss.
 The idea is to not compare images pixel-wise but consider difference of filtered images.
@@ -239,7 +256,7 @@ This loss can be defined for an arbitrary filter map as
   \label{eq:perceptual-loss}
   L_p = \Vert \phi( \bm{\hat{y}} ) - \phi (\bm{y}) \Vert_2^2 .
 \end{equation}
-We use filter maps $\phi$ taken from the pooling layers of a pre-trained VGG-16~\cite{Vgg} network.
+We use filter maps $\phi$ taken from the first and second pooling layer of a pre-trained VGG-16~\cite{Vgg} network.
 This leads to visually better images but decreased PSNR.
 See~\cite{PerceptualLoss} for motivation and details.
 
@@ -250,11 +267,10 @@ The generator is trained to fool the discriminator.
 This is realized as the optimization problem~\cite{GAN}
 \begin{align}
  \min_G \max_D \mathbb{E}_{x \sim P_r} \left[ \log (D({x})) \right] +
-  \mathbb{E}_{\hat{\bm{x}} \sim P_g} \left[  \log (1 - D(\hat{\bm{x}})) \right]
+  \mathbb{E}_{\hat{\bm{x}} \sim P_g} \left[  \log (1 - D(\hat{\bm{x}})) \right].
 \end{align}
 To improve stability, the generator minimizes
 \( - \mathbb{E}_{\hat{\bm{x}} \sim P_g} \left[ \log (D(\hat{\bm{x}})) \right]\)
-
 instead.
 The patch-discriminator does not predict a single probablity per image but rather one per image patch.
 Thus, the probability distributions $P_r$ and $P_g$ correspond to the distribution of real high-resolution patches and super-resolved patches respectively.
@@ -264,24 +280,50 @@ The first implementation that used an adversarial loss for single-image super-re
 \todo{Describe imagined artefacts?}
 \todo{Only standard GAN? or also wgan?}
 
+The total loss function is then
+\begin{equation}
+  \label{eq:total-loss}
+\sum_{\img, \hat{\img}}
+\frac{1}{3 W_{\img} H_{\img}}
+  \left( 5 L_{\text{sal}} (\img, \hat{img}) + 0.12  L_p(\img, \hat{\img}) \right) + 0.01 L_a(\img, \hat{\img}),
+\end{equation}
+where the sum runs over all model outputs \(\hat{\img}\) and the corresponding ground truth \(\img\).
+All losses are normalised by number of channels (3), image height \(H_{\img}\) and width \(W_{\img}\).
+The weights for saliency and adversarial loss are chosen such that they are of roughly the same order, the weight for the adversarial loss is chosen empirically.
+
 \section{Implementation \textit{\&} Training}
+\todo{Weight init.}
 We use the Messidor dataset~\cite{Messidor} which consists of 1200 high resolution fundus images.
+The black borders from the images were removed.
 We used 80\% of the dataset for training, the rest was used for validation.
-The images were augmented by random horicontal and vertical flips, a random scaling by a factor between $0.5$ and $1.0$ and a rotation by 0, 90, 180 or 270 degrees, similar as in~\cite{LapSRN}.
-We then choose a random crop of size $128 \times 128$ by rejection sampling:
-If a crop contains too many black pixels or no vessels it is rejected and another crop is chosen.
-The vessels are detected using a pre-computed Frangi filter.
-As a final augmentation we add specular reflections with a probability of $25\%$.
+The high resolution images are augmented by
+\begin{itemize}
+\item A random scaling with a factor uniformly distributed between $0.5$ and $1.0$.
+  We rescale using bicubic downsampling.
+\item Random crop of size $128 \times 128$ chosen by rejection sampling:
+If a crop contains more than $50\%$ black pixels (gray-scale value smaller than 90) or no vessels it is rejected and another crop is chosen.
+The vessels are detected using a pre-computed Frangi filter~\cite{Frangi}.
+We consider a crop to contain no vessels when less than $64$ pixels are marked as vessels by the Frangi filter.
+This threshold was chosen empirically.
+\item Random rotation by either $0, 90, 180, \text{or } 270$ degrees.
+  These roations do not change the size of the image.
+\item Random vertical and horicontal flip, each with a probability of $50\%$.
+\item Specular reflections with a probability of $25\%$.
 This is simulated by increasing the intensity of the image in a circular mask (post-processed with a Gaussian filter) by a random intensity.
 The specular reflection mirror the usage of light sources during operations.
+\end{itemize}
+Note that all augmentations (except the specular reflections) are also applied to the pre-computed saliency-maps and vessel segmentations.
 
-We then obtain low resolution images using bicubic downsampling followed by Gaussian blur with a radius uniformally distributed between $0.0$ and $2.0$.
-The blur is added completely to the low resolution image, the intermediate HR2 output is blurred with half of the blur strength.
-\todo{Explain how we distribute blur evenly?}
-\todo{Scaling by mean and variance}
-We try to sample crops that contain more information, to do this we reject crops which either contain too many black pixels or too few blood vessel pixels.
-The blood vessels are detected using a Frangi-filter~\cite{Frangi}.
-Finally, images are converted to tensors of range 0 to 1 and scaled by subtracting
+We obtain low resolution images are obtained using
+\begin{description}
+\item[Super-resolutuon] Gaussian blur (with a maximum radius of two) followed by bicubic downsampling or
+\item[Denoising] Gaussian blur (with a maximum radius of three).
+\end{description}
+The blurring is done by first selecting a random total blur radius, sampled uniformally between zero and the maximum blur.
+We then distribute the blur such that the intermediate image is blurred with half strength.
+This intermediate blur can be computed by \( \left( \text{radius}_{\text{total}} / \sqrt{2} \right)\), using the fact that a convolution of two Gaussians is a Gaussian.
+Finally, images and saliency maps) are converted to tensors of range 0 to 1.
+Images are scaled by subtracting
 \(
 \begin{bmatrix}
  0.485 & 0.456 & 0.406 
@@ -296,13 +338,15 @@ and dividing by
 This is the normalisation that is expected from the pre-trained VGG-16 network.
 
 We use a batch size of $64$ for all experiments.
+An epoch thus consists of $15$ gradient updates.
 
 Both networks are optimized by \textsc{adam}~\cite{Adam} with an initial learning rate of $1r-3$.
-\todo{Check if $10^4$ is really correct.}
-The generator is trained for $15 \times 10^4$ gradient iterations, the learning rate is divided by ten each $5 \times 10^4$ updates.
+We use a weight decay of $1e-4$ for the generator.
+The generator is trained for $9999$ epochs, the learning rate is divided by ten every $3333$ epochs.
 We first train solely the generator without the adversarial loss.
-The resulting network is then used to initialise the adversarial training, which continues for another $15 \times 10^4$ iterations.
-We validate after every $1005$ update iterations.
+The resulting network is then used to initialise the adversarial training, which continues for another $9999$ epochs.
+We validate after every $10$ epochs.
+\todo{Mention LR-Schedule for deblurring!}
 
 \section{Evaluation}
 The evaluation of image restoration networks is difficult, as commonly used metric do not correlate with perceptual quality.
@@ -330,18 +374,23 @@ In the implementation that we are using, the feature maps for the skip connectio
 This is a common architecure for bio-medical applications and similar architectures have been used successfully as generators for image-translation tasks~\cite{PatchGAN}.
 The UNet was trained with the same optimizer configuration and an identical learing rate schedule.
 
-% \begin{table}[]
-% \centering
-% \caption{Some Results, all measured in \textsc{psnr}}
+\begin{table}[]
+\centering
+\caption{Results for models on Drive dataset.}
 
-% \label{tab:results-sr}
-% \begin{tabular}{@{}lllll@{}}
-% \toprule
-% Model          & PSNR  & SSIM & Sobel-\textsc{mse} & \textsc{auc} \\ \midrule
-% Full & 0.0 & 0.0 & 0.0 & 0.0 \\
-% \bottomrule
-% \end{tabular}
-% \end{table}
+\label{tab:results-sr}
+\begin{tabular}{@{}lllll@{}}
+\toprule
+Model          & PSNR  & SSIM & Sobel-\textsc{mse} $\times 10^4$ & \textsc{auc} \\ \midrule
+Ground Truth & $\infty$ & 0.0 & 0.0 & 0.0 \\
+Bicubic & $0.0 & 0.0 & 0.0 & 0.0 \\
+Full & 0.0 & 0.0 & 0.0 & 0.0 \\
+Saliency + Perceptual & 0.0 & 0.0 & 0.0 & 0.0 \\
+Saliency & 0.0 & 0.0 & 0.0 & 0.0 \\
+Perceptual & 0.0 & 0.0 & 0.0 & 0.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \todo{PSNR table}
 \todo{Segmentation table, Frangi AND Retina-U-NEt}
