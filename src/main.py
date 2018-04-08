@@ -258,6 +258,12 @@ def main():
         assert(not args.use_wgan)
         discriminator = None
 
+    # Use data parallelism if more than one GPU.
+    if torch.cuda.device_count() > 1:
+        generator = nn.DataParallel(generator)
+        if discriminator is not None:
+            discriminator = nn.DataParallel(discriminator)
+
     # Setup optimizers
     if args.adversarial > 0:
         if args.use_wgan:
