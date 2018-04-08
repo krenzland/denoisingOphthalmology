@@ -264,7 +264,8 @@ def main():
             optimizer_generator = optim.Adam(generator.parameters(), betas=(0.0, 0.9), lr=args.lr)
             optimizer_discriminator = optim.Adam(discriminator.parameters(), betas=(0.0, 0.9), lr=args.lr)
         else:
-            optimizer_generator = optim.Adam(generator.parameters(), weight_decay=1e-4, lr=args.lr)
+            #optimizer_generator = optim.Adam(generator.parameters(), weight_decay=1e-4, lr=args.lr)
+            optimizer_generator = optim.Adam(generator.parameters(), betas=(0.5, 0.999), lr=args.lr)
             optimizer_discriminator = optim.Adam(discriminator.parameters(), weight_decay=0.0, lr=args.lr)
     else:
         optimizer_generator = optim.Adam(generator.parameters(), weight_decay=1e-4, lr=args.lr)
@@ -283,7 +284,7 @@ def main():
                                        args.perceptual))
                           
     # Combine all losses into one.
-    assert(len(criterions) > 0)
+    #assert(len(criterions) > 0)
     print(criterions)
     criterion = CombinedLoss(criterions).cuda()
 
