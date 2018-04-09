@@ -211,6 +211,8 @@ def main():
                         help="Set weight of adversarial loss. Default=0.0")
     parser.add_argument('--wgan', action='store_true', dest='use_wgan',
                         help="If true, use wgan-gp instead of standard GAN.")
+    parser.add_argument('--jobs', type=int, default=6,
+                        help="Number of threads used for data loading.")
     # ------------------ Directories ----------------------------------------------
     # Directories
     parser.add_argument('--data-dir', default='../data/processed/messidor',
@@ -356,9 +358,9 @@ def main():
                       verbose=True)
     train_dataset = SplitDataset(dataset, Split.TRAIN, 0.8) 
     validation_dataset = SplitDataset(dataset, Split.TEST, 0.8)
-    train_data = data.DataLoader(dataset=train_dataset, num_workers=6,\
+    train_data = data.DataLoader(dataset=train_dataset, num_workers=args.jobs,\
                                  batch_size=args.batch_size, shuffle=True, pin_memory=True)
-    validation_data = data.DataLoader(dataset=validation_dataset, num_workers=6,\
+    validation_data = data.DataLoader(dataset=validation_dataset, num_workers=args.jobs,\
                                       batch_size=args.batch_size, shuffle=True, pin_memory=True)
 
     # Initialise logging
