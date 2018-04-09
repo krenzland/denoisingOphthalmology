@@ -260,12 +260,6 @@ def main():
         assert(not args.use_wgan)
         discriminator = None
 
-    # Use data parallelism if more than one GPU.
-    if torch.cuda.device_count() > 1:
-        generator = nn.DataParallel(generator)
-        if discriminator is not None:
-            discriminator = nn.DataParallel(discriminator)
-
     # Setup optimizers
     if args.adversarial > 0:
         if args.use_wgan:
@@ -328,6 +322,15 @@ def main():
         print("Model succesfully loaded from checkpoint")
     else:
         start_epoch = 0
+
+    # Use data parallelism if more than one GPU.
+    if torch.cuda.device_count() > 1:
+        print("Using more than 1 GPU!")
+        generator = nn.DataParallel(generator)
+        if discriminator is not None:
+            discriminator = nn.DataParallel(discriminator)
+
+
 
     # After 10e5 gradient updates lower LR once.
     scheduler_generator = lr_scheduler.StepLR(optimizer_generator, step_size=3333, gamma=0.1, last_epoch = start_epoch - 1)
