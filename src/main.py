@@ -274,7 +274,7 @@ def main():
         else:
             #optimizer_generator = optim.Adam(generator.parameters(), weight_decay=1e-4, lr=args.lr)
             optimizer_generator = optim.Adam(generator.parameters(), betas=(0.5, 0.999), lr=args.lr)
-            optimizer_discriminator = optim.Adam(discriminator.parameters(), weight_decay=0.0, lr=args.lr)
+            optimizer_discriminator = optim.Adam(discriminator.parameters(), betas=(0.5, 0.999), lr=args.lr)
     else:
         optimizer_generator = optim.Adam(generator.parameters(), weight_decay=1e-4, lr=args.lr)
         optimizer_discriminator = None
