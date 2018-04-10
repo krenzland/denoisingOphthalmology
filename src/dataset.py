@@ -17,7 +17,7 @@ def load_image(path):
     return img 
 
 class Dataset(data.Dataset):
-    def __init__(self, path, hr_transform, lr_transform, verbose=False, seed=19534, use_saliency=True):
+    def __init__(self, path, hr_transform, lr_transform, verbose=False, seed=19534, use_saliency=True, preload=True):
         super(Dataset, self).__init__
         
         self.hr_transform = hr_transform
@@ -33,6 +33,10 @@ class Dataset(data.Dataset):
         
         self.filenames = [full_filename(f) for f in os.listdir(path) if is_image(f)]
         random.Random(seed).shuffle(self.filenames)
+
+        self.preload = preload
+        if not preload:
+            return
 
         self.images = []
         self.vessels = []
@@ -59,6 +63,7 @@ class Dataset(data.Dataset):
         return len(self.images)
     
     def __getitem__(self, idx):
+        assert(self.preload)
         img = self.images[idx]
         vessels = self.vessels[idx]
         if self.use_saliency:
