@@ -150,9 +150,15 @@ def unpad(img, border, cut_off_stripe=4):
     new_size = np.array(img.shape[0:-1])
     # Remove additional stripe of 4 px
     border = border + cut_off_stripe
-    img = img[border[0]:img.shape[0]-border[2],
-              border[1]:img.shape[1]-border[3]:,
-              :]
+    if len(img.shape) == 3:
+        img = img[border[0]:img.shape[0]-border[2],
+                border[1]:img.shape[1]-border[3],
+                :]
+    else:
+        # only 1 channel
+        img = img[border[0]:img.shape[0]-border[2],	
+                border[1]:img.shape[1]-border[3]]
+ 
     img = Image.fromarray(img)
     return img
 
@@ -203,7 +209,7 @@ def main():
             frangi_hr, frangi_sr, frangi_bic = [vessels(i, mask=mask).convert('YCbCr').split()[0] for i in [hr4_gt, hr4_sr, hr4_bic]]
 
             frangi_acc_sr, frangi_acc_bic = [acc(frangi_hr, other) for other in [frangi_sr, frangi_bic]]
-            segmentation_acc_hr, segmentation_acc_sr, segmentation_acc_bic =  [acc(unpad(gt), other) for other in [frangi_hr, frangi_sr, frangi_bic]]
+            segmentation_acc_hr, segmentation_acc_sr, segmentation_acc_bic =  [acc(unpad(gt, border=np.zeros(4, dtype=int)), other) for other in [frangi_hr, frangi_sr, frangi_bic]]
 
 
             # TODO: Maybe add accuracy for completely black image as well, or use better measure!
