@@ -4,7 +4,7 @@
 
 \usepackage[american]{babel}
 \usepackage[autostyle, english = american]{csquotes}
- \usepackage[%
+ \usepackage[maxbibnames=10,
    backend=biber]{biblatex}
  \addbibresource{../bibliography.bib}
 
@@ -13,6 +13,7 @@
 \usepackage{todonotes}
 \usepackage{caption}
 \usepackage{booktabs}
+\usepackage{siunitx}
 \usepackage{subcaption}
 \usepackage{bm}
 \usepackage{amsmath}
@@ -28,6 +29,8 @@
 \usepackage{tikz}
 \usetikzlibrary{arrows, positioning, shapes.geometric}
 \usetikzlibrary{calc}
+\graphicspath{{../../figures/}}
+
 \newcommand{\img}{\bm{f}} % TODO: Format
 
 \begin{document}
@@ -37,7 +40,6 @@
 \maketitle
 
 \section{Introduction}
-\todo{Write introduction}
 Intraoperative medical imaging is an important part of modern surgery.
 This project is focussed mostly on the example of retinal membrane peeling, which is an ophthalmic operation.
 While high quality images are available in the diagnostic phase, this is not true during operations.
@@ -50,7 +52,22 @@ This makes precise operations more difficult.
 The intraoperative images not only differ from the diagnostic ones in terms of quality.
 During surgery, instruments are present and the membrane is stained with a coloring agent to amplify its edges.
 
-Image processing algorithms can be used to increase the quality of the images via upscaling and denoising.
+Our goal is to increase the resolution of retinal fundus images both for diagnostic and intraoperative images.
+Assuming that we have a measured image \(\hat{\img}\) that is downsampled by an unknown operator \(\operatorname{\downarrow}\),
+\begin{equation}
+  \label{eq:model}
+  \hat{\img} = \operatorname{\downarrow}(\img),
+\end{equation}
+the goal is to find the best reconstruction of the original image \(\img\).
+We consider two different models for \(\operatorname{\downarrow}\):
+\begin{itemize}
+\item Downsampling by decresead spatial resolution.
+  In our case we want to reconstruct an image that was downscaled by a factor of $4$.
+  In the literature, this problem is called single image super resolution.
+\item Downsampling by decreased sharpness.
+  For this case we try to increase the quality of images by removing blur.
+\end{itemize}
+
 An image restoration algorithm has to fulfil the following requirements to be considered useful in an intraoperative setting:
 \begin{enumerate}
 \item All processing should happen in real time.
@@ -59,27 +76,20 @@ An image restoration algorithm has to fulfil the following requirements to be co
 Both blood vessels and the border of the membrane should be at least as clearly visible as in the original images.
 This implies that we have to preserve the image edges.
 \end{enumerate}
-All mentioned requirements are not specific to the application to ophthalmic surgery but also apply in the more general case.
-
-A denoising tool could also be used as a pre-processing step for further image processing procedures.
-Examples for this are automatic vessel segmentation and image registration, which both require high-quality images.
-
-The performance of classical image denoising algorithms is not promising for this scenario, because the nature of the image corruption is both complicated and highly irregular.
-This is why this project is focused on deep learning methods, which have been successfully used for both super-resolution and image restoration problems.
-
-We will use a dataset consisting of diagnostic retinal fundus images.
-They have a high quality and thus do not correspond to realistic intraoperative conditions.
-To rectify this, we have to perform data augmentation, i.e., we need to corrupt the images artificially and need to modify their content, for example by adding surgical tools.
-
-Because the anatomical structure of the retina is similar in both intraoperative and diagnostic images, we hope that transfer learning will provide good results.
-This means that we can use a large set of readily-available images for the initial training procedure.
-After this is done, the algorithm can be fine-tuned with a small dataset for which a ground truth is available.
-This is a promising approach in our case as both datasets consist of images with a similar structure.
+These constraints can be fulfilled by a deep learning approach.
 
 During the last few years a vast amount of different neural network topologies has been published.
 Most of them work on a larger amount of data than we have available and are complex models that do not work in real-time.
 The goal of this guided research is to compare different approaches for the denoising and upscaling of the aforementioned pictures.
 The main challenge of this project is finding a good trade-off between the resulting image quality and the usability during surgery.
+
+We make the following contributions:
+\begin{enumerate}
+\item We compare different loss functions and their suitability for medical image denoising.
+\item We present models that are able to reconstruct images detoriated by both mentioned downsampling operators in real-time.
+\item We evaluate the resulting algorithms on both diagnostic and intraoperative images and discuss their robustness against Blur.
+  This is combined with a discussion of the effectiveness of our transfer learning approach.
+\end{enumerate}
 
 % \section{Literature Review}
 % \subsection{Architectures}
@@ -188,29 +198,31 @@ The main challenge of this project is finding a good trade-off between the resul
 % \end{table}
 
 % \section{Problem Statement}
-Our goal is to increase the resolution of retinal fundus images.
-We discuss two similar problems here:
-\begin{itemize}
-\item Increasing the spatial resolution of images.
-  We consider images with a low number of pixels and increase the number of pixels by a factor of 16.
-  In the literature, this problem is called single image super resolution.
-\item Denoising images.
-  For this case we try to increase the quality of images by removing blur.
-\end{itemize}
-
-
-We make the following contributions:
-\begin{enumerate}
-\item We compare different loss functions and their suitability for medical image denoising.
-\item We present real-time capable models that are able to reconstruct images detoriated by both mentioned downsampling operators.
-  Using simple augmentations, we improve the performance for intraoperative imaging.
-\item We evaluate the resulting algorithms on both diagnostic and intraoperative images and evaluate their robustness against Blur.
-\end{enumerate}
-
 
 \section{Architecture}
 We use a modified \textbf{LapSRN} architecture which was presented in~\cite{LapSRN}.
 The network utilises a Laplacian pyramid, it first performs 2x upscaling and then 4x upscaling.
+
+\begin{figure}[htb]
+  \centering
+  \begin{subfigure}[b]{0.49\textwidth}
+  \includegraphics[width=1.0\textwidth]{{nn_lapsrn}}
+  \caption{LapSRN}
+  \label{fig:lapsrn}
+  \end{subfigure}\quad\begin{subfigure}[b]{0.48\textwidth}
+  \includegraphics[width=1\textwidth]{{nn_lapdeblur}}
+  \caption{LapDeblur}
+  \label{fig:lapdeblur}
+  \end{subfigure}
+  \caption{Generator architecture from~\cite{LapSRN}.
+    Blue and gray images show input and output images respectively.
+    Black lines represent convolutions.
+    Red lines correspond to resize-convolutions.
+    The plus is element-wise addition and blue lines correspond to the identity function.
+    All convolutions have 64 filters of size 3 with a padding and stride of 1.
+    \label{fig:networks}
+  }
+\end{figure}
 
 This architecture consists of two branches.
 The first branch is called \textbf{image reconstruction branch} and upscales the low resolution image using simple upscaling filters.
@@ -234,8 +246,20 @@ We thus use a similar architecture and keep the residual learning and the stepwi
 
 We use the PatchGan discriminator presented in~\cite{PatchGAN}.
 This is a fully convolutional discriminator that penalizes on a basis of $70\times70$ patches.
+Its architecture can be seen in \cref{fig:patchd}.
+\todo{Mark in and output?}
+We use instance normalisation~\cite{InstanceNorm} instead of batch normalisation.
 
-
+\begin{figure}[htb]
+  \centering
+  \includegraphics[width=0.5\textwidth]{{nn_patchd}}
+  \caption{Discriminator architecture from~\cite{PatchGAN}.
+    Solid and dashed lines represent convolutions with and without instance normalisation layers respectively.
+    Red lines are convolutions with stride 2, black ones with stride 1.
+    All convolutions have kernel size 4 and a padding of 1.
+  }
+  \label{fig:patchd}
+\end{figure}
 
 \section{Loss functions}
 In this work we combine three loss functions:
@@ -290,7 +314,7 @@ We propose a weighted version of the Charbonnier loss\todo{Cite charbonnier loss
 \todo{define weighted l1 loss}
 \begin{align}
 \label{eq:charbonnier}
-  L_{\text{sal}}( \hat{\bm{\img}}, \bm{\img}) = \Vert I_{\text{sal}}(\img) \circ \sqrt{ (\hat{\img} - \img) + \varepsilon} \Vert_1,
+  L_{\text{sal}}( \hat{\bm{\img}}, \bm{\img}) = \Vert I_{\text{sal}}(\img) \circ \sqrt{ (\hat{\img} - \img)^2 + \varepsilon} \Vert_1,
 \end{align}
 where $\varepsilon$ is a parameter set empirically to $1e-6$ for our experiments and \(\circ\) denotes the element-wise (Hadamard) product.
 It is a differentiable approximation of the $L_1$ loss which leads to sharper edges compared to a standard \textsc{mse}-loss~\cite{LapSRN}.
@@ -401,22 +425,27 @@ The the learning rate is divided by ten every $3333$ epochs.
 We first train solely the generator without adversarial loss.
 The resulting network is then used to initialise the adversarial training, which continues for another $9999$ epochs.
 We validate after every $10$ epochs.
+The network is implemented in Pytorch~\cite{Pytorch} and was trained using a Titan X.
+Training takes \SI{2}{\day} \SI{3}{\hour} for the super-resolution network without adversarial loss and an additional 1d5h for the adversarial training.
+The deblurring network took 1d10h without adversarial loss and an additional 1d20h for adversarial training.
 
 \section{Evaluation}
-The evaluation of image restoration networks is difficult, as commonly used metric do not correlate with perceptual quality.
-We use the \textsc{mse}-based metric \textsc{psnr}, defined by
-\begin{equation}
-  \label{eq:psnr}
-  \cdots,
-\end{equation}
-to verify that individual pixels are faithfully restored.
-Additionally we use the metric \textsc{ssim}~\cite{Ssim}, which compares images with sliding windows (is that true?).
-
-For our chosen application, the correct reconstruction of image gradients is important, for example because we want to achieve a clear border between areas where the membrane still exists and other areas.
+We use the \textsc{mse}-based metric \textsc{psnr} to compare images on a pixel-wise basis.
+Additionally, we use the structural similarity(\textsc{ssim})~\cite{Ssim} which uses a model based on human perception.
+For our chosen application, the correct reconstruction of image gradients is important, for example to enhance the border of the retina membrane.
 To do this, we compute the gradient magnitude with a Sobel filter and compare the reconstruction.
 
 Similarly to~\cite{SaliencyGAN} we also use vessel segmentation as a proxy for perceptual quality.
-For this we use both a Frangi filter~\cite{Frangi}, which is a simple method that is not robust, and the retina-unet~\cite{RetinaUnet}.
+For this we use two methods:
+\begin{enumerate}
+  \item The Frangi filter~\cite{Frangi} is a simple segmentation method.
+  This method is not robust.
+  We use the implementation of~\cite{Scikit-image} with parameters $\beta_1 = 0.7, \beta_2=0.01$ with a scale range of $(0, 3)$.
+  Pixels with a intensity of $0.2$ or large are marked as vessels.
+  These parameters were found with a grid search on the training set.
+\item As an example for a state-of-the art deep-learning based algorithm we use~\cite{RetinaUnet}.
+  It is based on the UNet-architecture~\cite{Unet}.
+\end{enumerate}
 We evaluate this on the testing set of the DRIVE dataset~\cite{Drive}.
 
 Finally, we look at the visual quality of the upscaling of intraoperative pictures.
@@ -430,43 +459,48 @@ To evaluate the effectiveness of our chosen loss function, we have trained diffe
   Some textural details are missing and edges of vessels are not clear.
 \item[Perceptual] The perceptual loss results in lower \textsc{psnr}.
   The images are more realistic and more visually pleasing.
+  It introduces regular artifacts.
 \item[Saliency \textit{\&} Perceptual] Combining both losses leads to the best pixel-wise error while still achieving a perceptual convincing reconstruction.
+  The artifacts of the perceptual loss are still visible but with a smaller intensity.
 \item[Saliency \textit{\&} Perceptual \textit{\&} Adversarial]
   \todo{Not true yet, theoretically true.}
   The addition of the adversarial loss improves the reconstruction of texture, the images are less blurry.
-  We introduce additional failure cases.
-  For example, the network guesses the orientation of blood vessels instead of predicting the average of all images.
+  Additionally, it removes the artifacts introduced by the perceptual loss.
+  The downside of this loss is the loss of accuracy:
+  Instead of predicting the average image it guesses some details.
 \end{description}
 Overall, the combination of saliency and perceptual loss results in both correct reconstruction and visually pleasing results.
 Adding adversarial learning trades correctness for visual quality.
 The best choice thus depends on the application.
+The results for the Drive dataset~\cite{Drive} can be seen in~\cref{tab:results-sr}, example images in figure~\todo{example imgs!}.
 
-The deblurring network is compared to a standard \textit{UNet} architecture with \textsc{mse} loss, trained in the same manner as our network.
+The deblurring network is compared to a standard \textit{UNet} architecture~\cite{Unet} with \textsc{mse} loss, trained in the same manner as our network.
 In the implementation that we are using\todo{Link to github?}, the feature maps for the skip connections are not cropped but rather padded such that they have the same shape.
 This is a common architecure for bio-medical applications and similar architectures have been used successfully as generators for image-translation tasks~\cite{PatchGAN}.
 
 
-% \begin{table}[]
-% \centering
-% \caption{Results for models on Drive dataset.}
+\begin{table}[]
+\centering
+\caption{Results for models on Drive (Test) dataset.}
 
-% \label{tab:results-sr}
-% \begin{tabular}{@{}lllll@{}}
-% \toprule
-% Model          & PSNR  & SSIM & Sobel-\textsc{mse} $\times 10^4$ & \textsc{auc} \\ \midrule
-% Ground Truth & $\infty$ & 0.0 & 0.0 & 0.0 \\
-% Bicubic & $0.0 & 0.0 & 0.0 & 0.0 \\
-% Full & 0.0 & 0.0 & 0.0 & 0.0 \\
-% Saliency + Perceptual & 0.0 & 0.0 & 0.0 & 0.0 \\
-% Saliency & 0.0 & 0.0 & 0.0 & 0.0 \\
-% Perceptual & 0.0 & 0.0 & 0.0 & 0.0 \\
-% \bottomrule
-% \end{tabular}
-% \end{table}
+\label{tab:results-sr}
+\begin{tabular}{@{}lS[table-format=2.3]S[table-format=2.3]S[table-format=2.3]S[table-format=2.3]@{}}
+\toprule
+{Model} & {PSNR} & {SSIM} & {Sobel \textsc{mse} \SI{1e4}{}} & {AUC} \\ \midrule
+Ground Truth & $\infty$ & 1.0 & 0.0 & 0.0 \\
+Bicubic & 35.00 & 0.909 & 29.294 & 0.0 \\
+Full & 0.0 & 0.0 & 0.0 & 0.0 \\
+Saliency + Perceptual & 0.0 & 0.0 & 0.0 & 0.0 \\
+Saliency & 0.0 & 0.0 & 0.0 & 0.0 \\
+Perceptual & 0.0 & 0.0 & 0.0 & 0.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-\todo{PSNR table}
+% \todo{PSNR table}
 \todo{Segmentation table, Frangi AND Retina-U-NEt}
 \todo{Intraoperative evaluation}
+
 \section{Summary}
 summary here
 
