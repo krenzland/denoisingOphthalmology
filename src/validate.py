@@ -115,14 +115,12 @@ def vessels(img, mask):
                      black_ridges=True)
 
     # Reset black pixels to black. Otherwise we get a surrounding ring.
-    #vessels[mask] = 0.0
     vessels[black] = 0.0
     vessels = (vessels > params['threshold'])
     vessels = Image.fromarray(vessels*255.0)
     return vessels
 
-def pad(img, new_size=None):
-    #print(img.size)
+def pad(img, new_size=None, color='black'):
     img = np.array(img).transpose(2,0,1) # Channel first
     size = np.array(img.shape)[1:]
     if new_size is None:
@@ -147,19 +145,14 @@ def pad(img, new_size=None):
     new_img = Image.fromarray(new_img)
     return new_img, border
 
-def unpad(img, border=np.array([0,0,0,0]), cut_off_stripe=4):
+def unpad(img, border, cut_off_stripe=4):
     img = np.array(img)
     new_size = np.array(img.shape[0:-1])
     # Remove additional stripe of 4 px
     border = border + cut_off_stripe
-    if len(img.shape) == 3:
-        img = img[border[0]:img.shape[0]-border[2],
-                border[1]:img.shape[1]-border[3]:,
-                :]
-    else:
-        img = img[border[0]:img.shape[0]-border[2],
-                border[1]:img.shape[1]-border[3]]
- 
+    img = img[border[0]:img.shape[0]-border[2],
+              border[1]:img.shape[1]-border[3]:,
+              :]
     img = Image.fromarray(img)
     return img
 

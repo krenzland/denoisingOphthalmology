@@ -6,7 +6,7 @@ import torch
 from torchvision.transforms import ToTensor, ToPILImage, CenterCrop
 from PIL import Image
 
-from test import upsample_tensor, upsample_bic
+from validate import upsample_tensor, upsample_bic
 from model import LapSRN
 
 def main():
