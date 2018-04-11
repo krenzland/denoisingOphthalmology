@@ -95,6 +95,14 @@ def edges(img):
     arr = pil_to_ndarray(img.convert('YCbCr').split()[0])
     return ndarray_to_pil(sobel(arr))
 
+def edge_error(a, b):
+    arr_a = pil_to_ndarray(a.convert('YCbCr').split()[0])
+    arr_b = pil_to_ndarray(b.convert('YCbCr').split()[0])
+    
+    s_a = sobel(arr_a)
+    s_b = sobel(arr_b)
+    return ((s_a - s_b)**2).mean()
+
 def vessels(img, mask):
     params = {'beta1': 0.7,
               'beta2': 0.01,
@@ -164,7 +172,7 @@ def unpad(img, border, cut_off_stripe=4):
 
 def main():
     checkpoint_dir = Path('../best_checkpoints/')
-    models = ['gan_notfinal', 'saly_perc', 'saliency', 'perceptual']
+    models = ['gan', 'saly_perc', 'saliency', 'perceptual']
     model_to_checkpoint = lambda m: checkpoint_dir / '{}.pt'.format(m) 
 
     rows = []
@@ -204,7 +212,7 @@ def main():
             ssim_sr = measure.compare_ssim(np.array(hr4_gt), np.array(hr4_sr), data_range=256, multichannel=True)
             ssim_bic = measure.compare_ssim(np.array(hr4_gt), np.array(hr4_bic), data_range=256, multichannel=True)
 
-            sobel_sr, sobel_bic = [mse(hr4_gt, out, edges) * 10e4 for out in [hr4_sr, hr4_bic]]
+            sobel_sr, sobel_bic = [edge_error(hr4_gt, out) * 10e4 for out in [hr4_sr, hr4_bic]]
 
             frangi_hr, frangi_sr, frangi_bic = [vessels(i, mask=mask).convert('YCbCr').split()[0] for i in [hr4_gt, hr4_sr, hr4_bic]]
 
