@@ -24,11 +24,11 @@ def main():
                     lr_transform=None,
                     preload=False)
     validation_files = dataset.filenames[int(len(dataset.filenames) * 0.8):]
+    print(len(validation_files))
     del dataset
     
     checkpoint_dir = Path('../best_checkpoints/')
     models = ['gan', 'saly_perc', 'saliency', 'perceptual']
-    models = [models[1]]
     model_to_checkpoint = lambda m: checkpoint_dir / '{}.pt'.format(m) 
 
     rows = []
@@ -59,22 +59,20 @@ def main():
                 bic_out = unpad(upsample_bic(lr)[factor//2-1], border, cut_off_stripe=factor)
                 gt = unpad(gt, border, cut_off_stripe=factor)
 
-                psnr_sr = measure.compare_psnr(np.array(gt), np.array(sr_out))
-                psnr_bic = measure.compare_psnr(np.array(gt), np.array(bic_out))
+                psnr_sr = psnr(gt, sr_out)
+                psnr_bic = psnr(gt, bic_out)
 
-                ssim_sr = measure.compare_ssim(np.array(gt), np.array(sr_out),
-                                            gaussian_weights=True, sigma=1.5, use_sample_covariance=False, data_range=256, multichannel=True)
-                ssim_bic = measure.compare_ssim(np.array(gt), np.array(bic_out),
-                                                gaussian_weights=True, sigma=1.5, use_sample_covariance=False, data_range=256, multichannel=True)
+                ssim_sr = ssim(gt, sr_out)
+                ssim_bic = ssim(gt, bic_out)
 
                 sobel_sr, sobel_bic = [edge_error(gt, out) * 10e4 for out in [sr_out, bic_out]]
 
                 rows += [[model_name, factor, img_path, psnr_sr, psnr_bic, ssim_sr, ssim_bic, sobel_sr, sobel_bic]]
-            break
 
-    columns = ['model_name', 'factor', 'img_path', 'psnr_sr', 'psnr_bic', 'ssim_sr', 'ssim_bic', 'sobel_sr', 'sobel_bic']
-    df = pd.DataFrame(data=rows, columns=columns)
-    df.to_csv("results_messidor.csv", index=None)
+        print('Saving intermed. csv!')
+        columns = ['model_name', 'factor', 'img_path', 'psnr_sr', 'psnr_bic', 'ssim_sr', 'ssim_bic', 'sobel_sr', 'sobel_bic']
+        df = pd.DataFrame(data=rows, columns=columns)
+        df.to_csv("results_messidor.csv", index=None)
 
 if __name__ == '__main__':
     main()

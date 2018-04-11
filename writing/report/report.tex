@@ -496,15 +496,15 @@ $\cdot$
 \toprule
 {Model} & {PSNR} & {SSIM} & {Sobel \textsc{mse} \SI{1e4}{}} & {AUC UNet} \\ \midrule
 Ground Truth & $\infty$ & 1.0 & 0.0 & 0.979 \\
-Bicubic & 34.91 & 0.91 & 29.87 &  0.852 \\
-Full & 37.00 & 0.90 & 8.77 & 0.941 \\
-Saliency + Perceptual & 38.24 & 0.92 & 7.84 & 0.946 \\
-Saliency & 37.96 & 0.93 & 8.55 & 0.921 \\
-Perceptual & 36.26 & 0.88 & 8.61 & 0.943 \\
+Bicubic & 35.27 & 0.92 & 29.87 &  0.852 \\
+Full & 38.41 & 0.92 & 8.77 & 0.941 \\
+Saliency + Perceptual & 39.20 & 0.93 & 7.84 & 0.946 \\
+Saliency & 39.50 & 0.94 & 8.55 & 0.921 \\
+Perceptual & 38.90 & 0.93 & 8.61 & 0.943 \\
 \bottomrule
 \end{tabular}
 \end{table}
-\todo{Explain padding of images}
+\todo{Explain padding of images: div. by 4 for sr, by 16 for unet, reflect pad, remove stripe of size factor for everything except unet}
 \todo{Add example images and failure case}
 
 % \todo{PSNR table}

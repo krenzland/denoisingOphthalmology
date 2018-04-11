@@ -91,9 +91,15 @@ def mse(y, y_hat, transform=lambda x:x):
     return np.sum(diff**2)/diff.size    
 
 def psnr(y, y_hat, transform=lambda x:x):
-    error = mse(y, y_hat, transform)
-    psnr = -10 * np.log10(error)
-    return psnr
+    y = np.array(y.convert('YCbCr').split()[0])
+    y_hat = np.array(y_hat.convert('YCbCr').split()[0])
+    return measure.compare_psnr(y, y_hat)
+
+def ssim(y, y_hat):
+    y = np.array(y.convert('YCbCr').split()[0])
+    y_hat = np.array(y_hat.convert('YCbCr').split()[0])
+    return measure.compare_ssim(y, y_hat, gaussian_weights=True, sigma=1.5,
+                                use_sample_covariance=False)
 
 def edges(img):
     arr = pil_to_ndarray(img.convert('YCbCr').split()[0])
@@ -170,7 +176,6 @@ def unpad(img, border, cut_off_stripe=4):
         # only 1 channel
         img = img[border[0]:img.shape[0]-border[2],	
                 border[1]:img.shape[1]-border[3]]
- 
     img = Image.fromarray(img)
     return img
 
@@ -206,17 +211,15 @@ def main():
             lr = hr4_gt.resize(lr_crop_size, Image.BICUBIC)
 
             elapsed_time, *sr_out = upsample_tensor(model, lr, to_normalize=True, return_time=True)
-            hr2_sr, hr4_sr = [unpad(to_pil(out), border) for out in sr_out]
+            hr2_sr, hr4_sr = [unpad(to_pil(out), border) for out in sr_out[0]]
             hr2_bic, hr4_bic = [unpad(out, border) for out in upsample_bic(lr)]
 
             hr4_gt = unpad(hr4_gt, border)
-            psnr_sr = measure.compare_psnr(np.array(hr4_gt), np.array(hr4_sr))
-            psnr_bic = measure.compare_psnr(np.array(hr4_gt), np.array(hr4_bic))
+            psnr_sr = psnr(hr4_gt, hr4_sr)
+            psnr_bic = psnr(hr4_gt, hr4_bic)
 
-            ssim_sr = measure.compare_ssim(np.array(hr4_gt), np.array(hr4_sr),
-                                           gaussian_weights=True, sigma=1.5, use_sample_covariance=False, data_range=256, multichannel=True)
-            ssim_bic = measure.compare_ssim(np.array(hr4_gt), np.array(hr4_bic),
-                                            gaussian_weights=True, sigma=1.5, use_sample_covariance=False, data_range=256, multichannel=True)
+            ssim_sr = ssim(hr4_gt, hr4_sr)
+            ssim_bic = ssim(hr4_gt, hr4_bic)
 
             sobel_sr, sobel_bic = [edge_error(hr4_gt, out) * 10e4 for out in [hr4_sr, hr4_bic]]
 
@@ -224,7 +227,6 @@ def main():
 
             frangi_acc_sr, frangi_acc_bic = [acc(frangi_hr, other) for other in [frangi_sr, frangi_bic]]
             segmentation_acc_hr, segmentation_acc_sr, segmentation_acc_bic =  [acc(unpad(gt, border=np.zeros(4, dtype=int)), other) for other in [frangi_hr, frangi_sr, frangi_bic]]
-
 
             # TODO: Maybe add accuracy for completely black image as well, or use better measure!
             rows += [[model_name, elapsed_time, psnr_sr, psnr_bic, ssim_sr, ssim_bic, sobel_sr, sobel_bic, \
