@@ -18,8 +18,11 @@ def time_model_single(model, img_size, n_times):
     times = []
     for i in range(n_times+2):
         img = get_img(img_size)
+        torch.cuda.synchronize()
+        torch.cuda.synchronize()
         start = time.perf_counter()
         up = model(img)
+        torch.cuda.synchronize()
         end = time.perf_counter()
         del up
         del img
