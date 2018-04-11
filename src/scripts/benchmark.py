@@ -34,6 +34,7 @@ def time_model_single(model, img_size, n_times):
 def time_model(model, model_name, sizes=[16,32,64]):
     results = []
     for size in sizes:
+        print(model_name, size)
         result = time_model_single(model, img_size=size, n_times=15)
         results.append((model_name, size, result))
     return results
@@ -44,7 +45,7 @@ def get_img(img_size):
 
 def main():
     deblur_range = [128, 256, 512, 1024, 1536, 2048]
-    upscale_range = [128, 256, 512, 1024]
+    upscale_range = [128, 256, 512, 768]
 
     unet = UNet(num_classes=3).cuda().eval()
     unet_times = time_model(unet, model_name='unet', sizes=deblur_range)
