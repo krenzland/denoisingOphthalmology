@@ -202,6 +202,7 @@ We make the following contributions:
 \section{Architecture}
 We use a modified \textbf{LapSRN} architecture which was presented in~\cite{LapSRN}.
 The network utilises a Laplacian pyramid, it first performs 2x upscaling and then 4x upscaling.
+It can be seen in figure~\cref{fig:lapsrn}.
 
 \begin{figure}[htb]
   \centering
@@ -233,22 +234,19 @@ Our model differs in two ways from the original architecture:
 \item We use three-channel \textsc{rgb} images both as input and output instead of working only on the Y-channel.
 \item Instead of transposed convolutions we use resize-convolution blocks.
   They are composed of a nearest neighbour interpolation, a reflect-pad of size one and a standard convolution filter.
-  Empirical evidence suggest that they lead to fewer interpolation artefacts than transposed convolution, especially when they are used in a \textsc{gan} framework\cite{deconvolution}.
-\item We only consider 4x upscaling here.
-  The approach presented here can be easily extended to larger upscaling ratios.
+  Empirical evidence suggest that they lead to fewer checkerboard artefacts than transposed convolution, especially when they are used in a \textsc{gan} framework\cite{deconvolution}.
+\item We only consider 4x upscaling here, but the approach can be easily extended to larger upscaling ratios.
 \end{itemize}
-The resulting architecture can be seen in figure xx.
-All convolutions in the generator have 64 $3 \times 3$ filters, a stride of one and a padding of one.
 
 For the deblurring case, the upsampling block is removed from the feature extraction pipeline.
 Additionally, the image reconstruction stage is replaced by the blurred high-resolution images.
-We thus use a similar architecture and keep the residual learning and the stepwise(?) reconstruction.
+This means that we can use a similar architecture for both downscaling operators.
+The modified architecture can be seen in~\cref{fig:lapdeblur}.
 
 We use the PatchGan discriminator presented in~\cite{PatchGAN}.
 This is a fully convolutional discriminator that penalizes on a basis of $70\times70$ patches.
 Its architecture can be seen in \cref{fig:patchd}.
 \todo{Mark in and output?}
-We use instance normalisation~\cite{InstanceNorm} instead of batch normalisation.
 
 \begin{figure}[htb]
   \centering
@@ -264,7 +262,7 @@ We use instance normalisation~\cite{InstanceNorm} instead of batch normalisation
 \section{Loss functions}
 In this work we combine three loss functions:
 A saliency weighted $L_1$-loss ensures the faithful reconstruction of important areas, a perceptual loss optimises visual similarity and an adversarial loss reconstructs high-frequency image components.
-This ensemble of loss functions is inspired by~\cite{SaliencyGAN}
+This ensemble of loss functions is inspired by~\cite{SaliencyGAN}.
 
 While the images in standard super-resolution tasks do not share a lot of common structure, retinal fundus images are visually similar to each other.
 This can be used to create hand-crafted saliency maps, that highlight relevant pixels.
@@ -275,7 +273,7 @@ The isophote curvature highlights fine structure in the image and can be compute
 \begin{equation}
  I_c = \frac{\img_{xx} \img_y^2 + \img_{yy} \img_x^2 - 2 \img_{x} \img_{xy} \img_{y} }{(\img_x^2 + \img_y^2)^{1.5}},
 \end{equation}
-where \(\img\) is the intensity of the image and its subscript represents its derivative.
+where \(\img\) is the intensity of the image and subscripts represents its derivatives.
 A derivation and discussion of this curvature function can be found in~\cite{Curvature}.
 We approximate the image derivatives by convolving the image with derivatives of Gaussians with \(\sigma = 1\).
 
@@ -295,7 +293,7 @@ This highlights compact regions of the image.
 We then compute the uniqueness of each pixel of a feature map \(f\) with the function
 \begin{equation}
   \label{eq:uniq}
-  U(f) = \sum_{o \in P_c} w(c, o) \vert f(c) - f(o) \vert,
+  U(m) = \sum_{o \in P_c} w(c, o) \vert m(c) - m(o) \vert,
 \end{equation}
 where \(c\) corresponds to the pixel in the middle of a patch \(P_c\) of size \(7 \times 7\).
 The function \(w(a,b) = \exp(d(a, b))\) weights the pixels by their Euclidean distance \(d\).
@@ -311,35 +309,33 @@ to obtain the saliency map for each image.
 
 We then use this map to weigh the pixel-wise error.
 We propose a weighted version of the Charbonnier loss\todo{Cite charbonnier loss}
-\todo{define weighted l1 loss}
 \begin{align}
 \label{eq:charbonnier}
   L_{\text{sal}}( \hat{\bm{\img}}, \bm{\img}) = \Vert I_{\text{sal}}(\img) \circ \sqrt{ (\hat{\img} - \img)^2 + \varepsilon} \Vert_1,
 \end{align}
-where $\varepsilon$ is a parameter set empirically to $1e-6$ for our experiments and \(\circ\) denotes the element-wise (Hadamard) product.
+where $\varepsilon$ is a parameter set empirically to $1e-6$ for our experiments and \(\circ\) denotes the element-wise product.
 It is a differentiable approximation of the $L_1$ loss which leads to sharper edges compared to a standard \textsc{mse}-loss~\cite{LapSRN}.
 
 Secondly, we use a perceptual loss.
 The idea is to not compare images pixel-wise but consider the difference of filtered images.
 Similar to~\cite{PerceptualLoss} we use the feature activations of the first and second pooling layer of a VGG-16 network~\cite{Vgg} trained on Imagenet.
-
+The resulting loss can be described by
 \begin{equation}
   \label{eq:perceptual-loss}
   L_p(\img, \hat{\img}) = \sum_{\mathclap{l \in \{ \text{pool}_1, \text{pool}_2 \}}} \Vert \phi_l( \bm{\hat{y}} ) - \phi_l (\bm{y}) \Vert_2^2,
 \end{equation}
 where \(\phi_l\) denotes the activations of the layer \(l\).
-We use filter maps $\phi$ taken from the first and second pooling layer of a pre-trained VGG-16~\cite{Vgg} network.
 This leads to visually better images but decreased PSNR.
 See~\cite{PerceptualLoss} for motivation and details.
 
 We use an adversarial loss as our final building block.
-Training then resembles a two-player game between a generator \(G\) an a discriminator network \(D\).
+Training then resembles a two-player game between a generator \(G\) an a discriminator \(D\).
 The discriminator tries to decide, whether an image is a ground-truth high-resolution image or an low resolution image that was upsampled by the generator.
 The generator is trained to fool the discriminator.
 Both networks are trained alternatingly.
 This is realized as the optimization problem~\cite{GAN}
 \begin{align}
- \min_G \max_D \mathbb{E}_{x \sim P_r} \left[ \log (D({x})) \right] +
+ \min_G \max_D \mathbb{E}_{\bm{x} \sim P_r} \left[ \log (D({\bm{x}})) \right] +
   \mathbb{E}_{\hat{\bm{x}} \sim P_g} \left[  \log (1 - D(\hat{\bm{x}})) \right].
 \end{align}
 To improve stability, the generator minimizes
@@ -352,16 +348,13 @@ Thus, the probability distributions $P_r$ and $P_g$ correspond to the distributi
 This discriminator design is able to discover high-frequency image details while relying on the other two losses for low-frequency content~\cite{PatchGAN}.
 Note that we only penalize the last output image by the adversarial loss.
 
-The first implementation that used an adversarial loss for single-image super-resolution was~\cite{SRGAN} which resulted in visually pleasing images.
-\todo{Describe imagined artefacts?}
-\todo{Only standard GAN? or also wgan?}
-
+%The first implementation that used an adversarial loss for single-image super-resolution was~\cite{SRGAN} which resulted in visually pleasing images.
 The total loss function is then
 \begin{equation}
   \label{eq:total-loss}
 \sum_{\img, \hat{\img}}
 \frac{1}{3 W_{\img} H_{\img}}
-  \left( 5 L_{\text{sal}} (\img, \hat{\img}) + 0.12  L_p(\img, \hat{\img}) \right) + 0.01 L_a,
+  \left( 5 L_{\text{sal}} (\img, \hat{\img}) + 0.12  L_p(\img, \hat{\img}) \right) + 0.1 L_a,
 \end{equation}
 where the sum runs over all model outputs \(\hat{\img}\) and the corresponding ground truth \(\img\).
 All losses are normalised by number of channels (3), image height \(H_{\img}\) and width \(W_{\img}\).
@@ -372,33 +365,35 @@ The weights for saliency and perceptual loss are chosen such that they are of si
 We use the Messidor dataset~\cite{Messidor} which consists of 1200 high resolution fundus images.
 The black borders from the images were removed.
 We used 80\% of the dataset for training, the rest was used for validation.
-The high resolution images are augmented by
+The high resolution images are augmented by:
 \begin{itemize}
 \item A random scaling with a factor uniformly distributed between $0.5$ and $1.0$.
   We rescale using bicubic downsampling.
 \item Random crop of size $128 \times 128$ chosen by rejection sampling:
 If a crop contains more than $50\%$ black pixels (gray-scale value smaller than 90) or no vessels it is rejected and another crop is chosen.
 The vessels are detected using a pre-computed Frangi filter~\cite{Frangi}.
-We consider a crop to contain no vessels when less than $64$ pixels are marked as vessels by the Frangi filter.
+We consider a crop to contain no vessels when fewer than $64$ pixels are marked as vessels by the Frangi filter.
 This threshold was chosen empirically.
 \item Random rotation by either $0, 90, 180, \text{or } 270$ degrees.
-  These roations do not change the size of the image.
+  These roations do not change the size of the image and thus need no rescaling.
 \item Random vertical and horicontal flip, each with a probability of $50\%$.
 \item Specular reflections with a probability of $25\%$.
 This is simulated by increasing the intensity of the image in a circular mask (post-processed with a Gaussian filter) by a random intensity.
 The specular reflection mirror the usage of light sources during operations.
 \end{itemize}
-Note that all augmentations (except the specular reflections) are also applied to the pre-computed saliency-maps and vessel segmentations.
+Note that all augmentations (except the specular reflections) are also applied to the pre-computed saliency-maps and the random scaling is applied on the vessel segmentations.
+The scaling, rotation and flipping augmentations are also used by~\cite{LapSRN}.
 
-We obtain low resolution images are obtained using
+We obtain low resolution images are using
 \begin{description}
-\item[Super-resolutuon] Gaussian blur (with a maximum radius of two) followed by bicubic downsampling or
+\item[Super-resolution] Gaussian blur (with a maximum radius of two) followed by bicubic downsampling or
 \item[Denoising] Gaussian blur (with a maximum radius of three).
 \end{description}
 The blurring is done by first selecting a random total blur radius, sampled uniformally between zero and the maximum blur.
 We then distribute the blur such that the intermediate image is blurred with half strength.
 This intermediate blur can be computed by \( \left( \text{radius}_{\text{total}} / \sqrt{2} \right)\), using the fact that a convolution of two Gaussians is a Gaussian.
-Finally, images and saliency maps) are converted to tensors of range 0 to 1.
+
+Finally, images and saliency maps are converted to tensors of range 0 to 1.
 Images are scaled by subtracting
 \(
 \begin{bmatrix}
@@ -416,17 +411,22 @@ This is the normalisation that is expected from the pre-trained VGG-16 network.
 We use a batch size of $64$ for all experiments.
 An epoch thus consists of $15$ gradient updates.
 
-Both networks are optimized by \textsc{adam}~\cite{Adam} with an initial learning rate of $1r-3$ for the super-resolution network and $1e-4$ for the deblurring network.
-\todo{Mention Beta1 and LR for ADAM + adv (not finished yet!)}
-We use a weight decay of $1e-4$ for the generator.
+All weights of the generator are initialised with Xavier initialisation, all weights of the generator are drawn from a normal distribution with mean zero and variance of 0.02. 
+\todo{Cite xavier init!}
+We first train solely the generator without adversarial loss.
+It is optimized by \textsc{adam}~\cite{Adam} with an initial learning rate of $1r-3$ for the super-resolution network and $1e-4$ for the deblurring network.
+We use a weight decay of $1e-4$.
 The super-resolution generator is trained for $9999$ epochs, the deblurring generator for $6666$ epochs.
 The the learning rate is divided by ten every $3333$ epochs.
 
-We first train solely the generator without adversarial loss.
-The resulting network is then used to initialise the adversarial training, which continues for another $9999$ epochs.
+The resulting network is then used to initialise the adversarial training, which continues for another $6666$ epochs.
+This training uses the same learning rate for both networks, starting with an initial rate of $\SI{1e-5}{}$, again decayed by $10$ every $3333$ epochs.
+We use \textsc{adam} with the momentum term $\beta_1$ set to $0.5$ for improved stability.
+No weight decay is used in this stage.
+
 We validate after every $10$ epochs.
 The network is implemented in Pytorch~\cite{Pytorch} and was trained using a Titan X.
-Training takes \SI{2}{\day} \SI{3}{\hour} for the super-resolution network without adversarial loss and an additional 1d5h for the adversarial training.
+Training takes \SI{20}{\hour} for the super-resolution network without adversarial loss and an additional 1d5h for the adversarial training.
 The deblurring network took 1d10h without adversarial loss and an additional 1d20h for adversarial training.
 
 \section{Evaluation}
@@ -448,9 +448,6 @@ For this we use two methods:
 \end{enumerate}
 We evaluate this on the testing set of the DRIVE dataset~\cite{Drive}.
 
-Finally, we look at the visual quality of the upscaling of intraoperative pictures.
-These images differ strongly to the images seen by the network, it is thus an instance of transfer learning.
-
 We compare the super resolution network with bicubic interpolation.
 
 To evaluate the effectiveness of our chosen loss function, we have trained different combinations with the same settings.
@@ -468,6 +465,8 @@ To evaluate the effectiveness of our chosen loss function, we have trained diffe
   Additionally, it removes the artifacts introduced by the perceptual loss.
   The downside of this loss is the loss of accuracy:
   Instead of predicting the average image it guesses some details.
+  This can lead to additional failure cases where the network hallucinates details.
+  An example for this can be seen in figure xxx.
 \end{description}
 Overall, the combination of saliency and perceptual loss results in both correct reconstruction and visually pleasing results.
 Adding adversarial learning trades correctness for visual quality.
@@ -477,32 +476,44 @@ The results for the Drive dataset~\cite{Drive} can be seen in~\cref{tab:results-
 The deblurring network is compared to a standard \textit{UNet} architecture~\cite{Unet} with \textsc{mse} loss, trained in the same manner as our network.
 In the implementation that we are using\todo{Link to github?}, the feature maps for the skip connections are not cropped but rather padded such that they have the same shape.
 This is a common architecure for bio-medical applications and similar architectures have been used successfully as generators for image-translation tasks~\cite{PatchGAN}.
+\todo{Evaluate deblurring}
+
+Finally, we look at the visual quality of the upscaling of intraoperative pictures.
+These images differ strongly to the images seen by the network, it is thus an instance of transfer learning.
+\todo{Intraoperative}
+$\cdot$
 
 
 \begin{table}[]
 \centering
-\caption{Results for models on Drive (Test) dataset.}
+\caption{Results for super resolution models on Drive (Test) dataset.
+  AUC corresponds to area under the receiver-operator curve achieved by running the retina-unet on the upscaled images.
+  Best results are bold.
+}
 
 \label{tab:results-sr}
-\begin{tabular}{@{}lS[table-format=2.3]S[table-format=2.3]S[table-format=2.3]S[table-format=2.3]@{}}
+\begin{tabular}{@{}lS[table-format=2.2]S[table-format=2.2]S[table-format=2.2]S[table-format=2.3]@{}}
 \toprule
-{Model} & {PSNR} & {SSIM} & {Sobel \textsc{mse} \SI{1e4}{}} & {AUC} \\ \midrule
-Ground Truth & $\infty$ & 1.0 & 0.0 & 0.0 \\
-Bicubic & 35.00 & 0.909 & 29.294 & 0.0 \\
-Full & 0.0 & 0.0 & 0.0 & 0.0 \\
-Saliency + Perceptual & 0.0 & 0.0 & 0.0 & 0.0 \\
-Saliency & 0.0 & 0.0 & 0.0 & 0.0 \\
-Perceptual & 0.0 & 0.0 & 0.0 & 0.0 \\
+{Model} & {PSNR} & {SSIM} & {Sobel \textsc{mse} \SI{1e4}{}} & {AUC UNet} \\ \midrule
+Ground Truth & $\infty$ & 1.0 & 0.0 & 0.979 \\
+Bicubic & 34.91 & 0.91 & 29.87 &  0.852 \\
+Full & 37.00 & 0.90 & 8.77 & 0.941 \\
+Saliency + Perceptual & 38.24 & 0.92 & 7.84 & 0.946 \\
+Saliency & 37.96 & 0.93 & 8.55 & 0.921 \\
+Perceptual & 36.26 & 0.88 & 8.61 & 0.943 \\
 \bottomrule
 \end{tabular}
 \end{table}
+\todo{Explain padding of images}
+\todo{Add example images and failure case}
 
 % \todo{PSNR table}
 \todo{Segmentation table, Frangi AND Retina-U-NEt}
-\todo{Intraoperative evaluation}
+\todo{Evaluate speed}
 
 \section{Summary}
-summary here
+$\cdots$
+\todo{write summary}
 
 \printbibliography
 \end{document}
