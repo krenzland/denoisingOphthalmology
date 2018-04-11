@@ -14,7 +14,7 @@ from torch import autograd
 from models.lap_srn import LapSRN
 from models.unet import UNet
 
-def time_model_single(model, img_size, n_times):
+def time_model_single(model, img_size, n_times, num_output):
     times = []
     for i in range(n_times+2):
         img = get_img(img_size)
