@@ -20,15 +20,21 @@ def time_model_single(model, img_size, n_times):
         img = get_img(img_size)
         torch.cuda.synchronize()
         torch.cuda.synchronize()
-        start = time.perf_counter()
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
+        
+        start_event.record()
+
         up = model(img)
-        torch.cuda.synchronize()
-        end = time.perf_counter()
+        
+        end_event.record()
+        end_event.synchronize()        
+        
         del up
-        del img
+        
         # Discard first measurement (outlier)
         if i != 0:
-            times.append((end-start)*1000) # ms
+            times.append(start_event.elapsed_time(end_event)) # ms
     return np.array(times).mean()
 
 def time_model(model, model_name, sizes=[16,32,64]):
