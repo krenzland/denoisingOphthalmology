@@ -125,7 +125,7 @@ class LapSRN(nn.Module):
         hr2 = self.image_reconstruction0(image, features0)
 
         if num_output == 1:
-            return hr2
+            return [hr2]
         
         features1 = self.feature_extraction1(features0)
         hr4 = self.image_reconstruction1(hr2, features1) 

@@ -16,7 +16,7 @@ from skimage.io._plugins.pil_plugin import pil_to_ndarray, ndarray_to_pil
 #from dataset import Dataset, Split, SplitDataset, get_lr_transform, get_hr_transform
 from models.lap_srn import LapSRN
 
-def upsample_tensor(model, lr, return_time=False, to_normalize=False):      
+def upsample_tensor(model, lr, return_time=False, to_normalize=False, factor=4):      
     mean=np.array([0.485, 0.456, 0.406])
     std=np.array([0.229, 0.224, 0.225])
     normalize = Normalize(mean=mean, std=std)
@@ -36,17 +36,21 @@ def upsample_tensor(model, lr, return_time=False, to_normalize=False):
         return out.clamp(0,1)
     
     start = time.perf_counter()
-    upscaled = model(lr)
+    if factor == 2:
+        upscaled = model(lr, num_output=1)
+    else:
+        upscaled = model(lr)
+        
     end = time.perf_counter()
     
-    hr2, hr4 = [denormalize(out.squeeze(0).cpu().data) for out in upscaled]
+    upscaled = [denormalize(out.squeeze(0).cpu().data) for out in upscaled]
 
     elapsed_time = end - start
 
     if return_time:
-        return elapsed_time, hr2, hr4
+        return elapsed_time, upscaled
     else:
-        return hr2, hr4
+        return upscaled
     
 def upsample_bic(lr):
     lr_size = np.array(lr.size)
@@ -209,8 +213,10 @@ def main():
             psnr_sr = measure.compare_psnr(np.array(hr4_gt), np.array(hr4_sr))
             psnr_bic = measure.compare_psnr(np.array(hr4_gt), np.array(hr4_bic))
 
-            ssim_sr = measure.compare_ssim(np.array(hr4_gt), np.array(hr4_sr), data_range=256, multichannel=True)
-            ssim_bic = measure.compare_ssim(np.array(hr4_gt), np.array(hr4_bic), data_range=256, multichannel=True)
+            ssim_sr = measure.compare_ssim(np.array(hr4_gt), np.array(hr4_sr),
+                                           gaussian_weights=True, sigma=1.5, use_sample_covariance=False, data_range=256, multichannel=True)
+            ssim_bic = measure.compare_ssim(np.array(hr4_gt), np.array(hr4_bic),
+                                            gaussian_weights=True, sigma=1.5, use_sample_covariance=False, data_range=256, multichannel=True)
 
             sobel_sr, sobel_bic = [edge_error(hr4_gt, out) * 10e4 for out in [hr4_sr, hr4_bic]]
 
