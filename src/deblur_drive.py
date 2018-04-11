@@ -48,7 +48,7 @@ def main():
 
     model_to_checkpoint = lambda m: checkpoint_dir / '{}.pt'.format(m) 
 
-    checkpoint_name = 'unet'
+    checkpoint_name = 'nogan'
 
     checkpoint = torch.load(model_to_checkpoint(checkpoint_name))
     if checkpoint_name != 'unet':
@@ -75,9 +75,10 @@ def main():
 
                 to_pil = ToPILImage()
 
-                # UNet expects square images that are div. by 16
-                new_size = [max(np.ceil(img.size[0]/16)*16,
-                                np.ceil(img.size[1]/16)*16)]*2
+                # UNet expects images side lengths that are div. by 16
+                # Pad switches axes
+                new_size = (np.ceil(img.size[1]/16)*16,
+                                np.ceil(img.size[0]/16)*16)
                 gt, border = pad(img, new_size=new_size)
 
                 lr = gt.filter(GaussianBlur(blur))
