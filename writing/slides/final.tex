@@ -1,0 +1,384 @@
+\documentclass{beamer}
+\usetheme{metropolis} % Use metropolis theme
+\usepackage{lmodern}
+
+\renewcommand{\footnoterule}{%
+  \hspace{2cm}
+  \kern -3pt
+  \hrule width \textwidth height 1pt
+  \kern 2pt
+}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[autostyle, english = british]{csquotes}
+\usepackage[british]{babel}
+\usepackage{todonotes}
+\usepackage[%
+  backend=biber,
+  doi=false,
+  url=false,
+  isbn=false,
+  eprint=false,
+  style=verbose,
+  citestyle=verbose,
+  hyperref=true,
+  maxnames=99,
+  minnames=1,
+  maxbibnames=99,
+  firstinits,
+  uniquename=init]{biblatex}
+%\DeclareFieldFormat[inproceedings, article]{pages}{}%
+%\DeclareFieldFormat[inproceedings]{organization}{}%
+  % ignore some field for citations
+\DeclareSourcemap{
+  \maps[datatype=bibtex, overwrite]{
+    \map{
+      \step[fieldset=edition, null]
+      \step[fieldset=publisher, null]
+      \step[fieldset=pages, null]
+      \step[fieldset=organization, null]
+    }
+  }
+}
+
+\addbibresource{../bibliography.bib}
+
+\let\oldfootnotesize\footnotesize
+\renewcommand*{\footnotesize}{\oldfootnotesize\fontsize{6}{6}}
+
+\usepackage{caption}
+\usepackage{xpatch}
+\usepackage{bm}
+\usepackage{amsmath}
+\usepackage{mathtools} % for \mathclap
+\usepackage{varioref}
+\usepackage{siunitx}
+\usepackage{hyperref}
+\usepackage[noabbrev]{cleveref}
+\newcommand{\creflastconjunction}{, and\nobreakspace} % use Oxford comma
+\usepackage{todonotes}
+\usepackage{multimedia}
+\usepackage{subcaption}
+\usepackage{tikz}
+\usepackage{booktabs}
+\usetikzlibrary{arrows, positioning, shapes.geometric}
+\usetikzlibrary{calc}
+\usepackage{pgfgantt}
+\newcommand{\img}{\bm{f}} % TODO: Format
+
+
+\graphicspath{{../../figures/}}
+
+\newcommand{\cn}{\footnote{\enquote{TODO: Citation.}, 2017, \textbf{Conference}, \textit{Author 1, Author 2, Author 3, Author 4} }}
+
+\title{Deep-Learning-based Image Denoising in Ophthalmology\\Guided Research Final}
+\author{Lukas Krenz\\Adviser: Nicola Rieke\\Director: Prof.\ Dr.\ Nassir Navab}
+\date{April 13, 2018} 
+\institute{TUM, Chair for Computer Aided Medical Procedures \textit{\&} Augmented Reality}
+
+\begin{document}
+\maketitle
+
+% \begin{frame}
+%   \frametitle{Example Use-Case: Digital Window}
+%    \begin{figure}[h]
+%     \centering
+%     \movie[width=0.9735\textwidth, height=0.55\textwidth, autostart,, loop, poster]{}{digitalwindow.mp4}
+%     \caption*{Digital Window}
+%     \label{fig:digital-window}
+%   \end{figure}
+% \end{frame}
+
+
+\begin{frame}{Goals}
+\begin{block}{Idea}
+\begin{itemize}
+\item Improve quality of retinal images by super-resolution \textit{\&} deblurring with deep learning
+\item Should work in an intraoperative setting
+\end{itemize}
+\end{block}
+
+\begin{block}{Use cases}
+\begin{itemize}
+\item Pre-processing for other computer vision algorithms
+\item Provide improved quality for digital zoom
+\end{itemize}
+\end{block}
+
+\begin{block}{Constraints}
+  \begin{itemize}
+  \item Real-time, as fast as possible
+  \item Different levels of zoom
+  \item Preserve anatomical structure (vessels, etc.)
+  \end{itemize}
+\end{block}
+\end{frame}
+
+\begin{frame}{Architectures - Generators\footfullcite{LapSRN}}
+ \begin{figure}[htb]
+  \centering
+  \begin{subfigure}[b]{0.45\textwidth}
+  \includegraphics[width=1.0\textwidth]{{nn_lapsrn}}
+  \caption{LapSRN}
+  \label{fig:lapsrn}
+  \end{subfigure}\quad\begin{subfigure}[b]{0.45\textwidth}
+  \includegraphics[width=1\textwidth]{{nn_lapdeblur}}
+  \caption{LapDeblur}
+  \label{fig:lapdeblur}
+  \end{subfigure}
+  \caption*{
+    Blue and gray: input and output images
+
+    Black lines: convolutions.\qquad
+    Blue lines: identity function.
+
+    Red lines: to resize-convolutions.
+    Plus: element-wise addition
+  }
+\end{figure}
+ 
+\end{frame}
+
+\begin{frame}{Architectures - Discriminator\footfullcite{PatchGAN}}
+  \begin{center}
+    \includegraphics[width=0.4\textwidth]{{nn_patchd}}
+  \end{center}
+    
+
+Solid/dashed lines: convolutions with and without instance normalisation
+
+Red lines: stride 2\qquad Black Lines stride 1.
+\end{frame}
+
+\begin{frame} \frametitle{Loss Functions 0: The ensemble\footfullcite{SaliencyGAN}}
+\begin{equation}
+  \label{eq:total-loss}
+\sum_{\img, \hat{\img}}
+\frac{1}{3 W_{\img} H_{\img}}
+  \left( 5 L_{\text{sal}} (\img, \hat{\img}) + 0.12  L_p(\img, \hat{\img}) \right) + 0.1 L_a
+\end{equation}
+Linear combination of saliency loss ($L_\text{sal}$), perceptual loss ($L_p$) and adversarial loss ($L_a$).
+
+$\img$: real image, $\hat{\img}$ super-resolved/denoised image
+
+normalized by image size $3 W_{\img} H_{\img}$
+\end{frame}
+
+
+\begin{frame}{Loss Functions 1: Saliency Weighted Charbonnier Loss (0)}
+  Idea: $L_1$ loss\footfullcite{LapSRN} weighted by saliency map $I_{\text{sal}}$
+
+\begin{align}
+\label{eq:charbonnier}
+  L_{\text{sal}}( \hat{\bm{\img}}, \bm{\img}) = \Vert I_{\text{sal}}(\img) \circ \sqrt{ (\hat{\img} - \img)^2 + \varepsilon} \Vert_1
+\end{align}
+
+$\varepsilon = 10^{-6}$
+
+\end{frame}
+
+\begin{frame}{Loss Functions 1: Saliency Weighted Charbonnier Loss (1)\footfullcite{SaliencyGAN}}
+\begin{columns}
+  \begin{column}{0.5\linewidth}
+      \centering
+      \includegraphics[width=0.5\textwidth]{saliency_gt}
+
+      \includegraphics[width=0.8\textwidth]{saliency_vessels}
+  \end{column}
+  \begin{column}{0.6\linewidth}
+  First component: curvature map
+\begin{equation}
+ I_c = \frac{\img_{xx} \img_y^2 + \img_{yy} \img_x^2 - 2 \img_{x} \img_{xy} \img_{y} }{(\img_x^2 + \img_y^2)^{1.5}}
+\end{equation}
+\end{column} 
+\end{columns}
+
+\end{frame}
+
+\begin{frame}{Loss Functions 1: Saliency Weighted Charbonnier Loss (2)\footcite{SaliencyGAN}}
+\begin{columns}
+  \begin{column}{0.5\linewidth}
+      \centering
+      \includegraphics[width=0.5\textwidth]{saliency_gt}
+
+      \includegraphics[width=0.8\textwidth]{saliency_entropy}
+  \end{column}
+  \begin{column}{0.6\linewidth}
+Second component: local image entropy over $7 \times 7$ patches $P_s$ around pixel $s$
+\begin{equation}
+  \label{eq:entr}
+  I_e = - \sum_{s \in P_s} p(s_i) \log(p(s_i)),
+\end{equation}
+$p(s_i)$ probability that pixel has intensity in neighborhood (approximated using histogram)
+
+\end{column} 
+\end{columns}
+\end{frame}
+
+\begin{frame}{Loss Functions 1: Saliency Weighted Charbonnier Loss (1)\footcite{SaliencyGAN}}
+\begin{columns}
+  \begin{column}{0.5\linewidth}
+      \centering
+      \includegraphics[width=0.5\textwidth]{saliency_gt}
+
+      \includegraphics[width=0.8\textwidth]{saliency_full}
+  \end{column}
+  \begin{column}{0.6\linewidth}
+
+Finally,
+\begin{equation}
+  \label{eq:saliency}
+  I_{\text{sal}} = 0.4 \cdot U(I_c) + 0.6 \cdot U(1 - I_e)
+\end{equation}
+
+Linear combination of uniqueness  maps in $7 \times 7$ neighborhood
+ \begin{equation}
+  \label{eq:uniq}
+  U(m) = \sum_{o \in P_c} w(c, o) \vert m(c) - m(o) \vert,
+\end{equation}
+$w(c, o)$ decays exponentially for larger pixel distance between center $c$ and other $o$ 
+
+\end{column} 
+\end{columns}
+\end{frame}
+
+
+
+\begin{frame}{Loss Functions 2: Perceptual Loss\footfullcite{PerceptualLoss}}
+  Compare visual features
+
+  Filters $\phi$ taken from VGG-16 network
+
+  First and second pooling layer got best results (correspond to low-level features)
+ 
+\begin{equation}
+  \label{eq:perceptual-loss}
+  L_p(\img, \hat{\img}) = \sum_{\mathclap{l \in \{ \text{pool}_1, \text{pool}_2 \}}} \Vert \phi_l( \bm{\hat{y}} ) - \phi_l (\bm{y}) \Vert_2^2
+\end{equation}
+\end{frame}
+
+\begin{frame}{Loss Function 3: Adversarial Loss\footfullcite{SRGAN}}
+  Two player game between
+  \begin{description}
+  \item[Generator (G)] Super-resolution network
+  \item[Discriminator (D)] Tries to decide, whether images are \textbf{real} high-resolution images or \textbf{generated} by our network
+  \end{description}
+
+\begin{align}
+ \min_G \max_D \mathbb{E}_{\bm{x} \sim P_r} \left[ \log (D({\bm{x}})) \right] +
+  \mathbb{E}_{\hat{\bm{x}} \sim P_g} \left[  \log (1 - D(\hat{\bm{x}})) \right]
+\end{align}
+
+with $P_r$ real patch distribution and $P_g$ generated patch distribution
+\end{frame}
+
+\begin{frame}{Evaluation}
+  Normally: Compare pixel-wise reconstruction error
+
+  \textbf{Difficult} in our case
+
+  Perceptual \textit{\&} adversarial loss improve perceived quality but increase error!
+
+  Use:
+  \begin{itemize}
+  \item PSNR, pixel pased
+  \item SSIM, human-perception model
+  \item Pixel-based error of Sobel filter (gradients)
+  \item Vessel segmentation on Drive dataset\footfullcite{Drive} with retina-unet\footfullcite{RetinaUnet}
+  \end{itemize}
+\end{frame}
+
+\begin{frame} \frametitle{Evaluation SR: Metrics}
+ \begin{table}[]
+\centering
+\caption{Results for super resolution models on Drive (Test) dataset.
+  AUC corresponds to area under the receiver-operator curve achieved by running the retina-unet on the upscaled images.
+  Best results are bold.
+}
+
+\label{tab:results-sr}
+\begin{tabular}{@{}lS[table-format=2.3]S[table-format=2.3]S[table-format=2.3]S[table-format=2.3]@{}}
+\toprule
+{Model} & {PSNR} & {SSIM} & {Sobel \textsc{mse} \SI{1e4}{}} & {AUC UNet} \\ \midrule
+Ground Truth & $\infty$ & 1.0 & 0.0 & 0.979 \\
+Bicubic & 35.00 & 0.909 & 29.294 &  0.852 \\
+Full & 0.0 & 0.0 & 0.0 & 0.0 \\
+Sal.\ + Perc\  & 0.0 & 0.0 & 0.0 & 0.946 \\
+Saliency & 0.0 & 0.0 & 0.0 & 0.921 \\
+Perceptual & 0.0 & 0.0 & 0.0 & 0.943 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{frame}
+
+\begin{frame} \frametitle{Evaluation SR Images}
+  \centering
+ \includegraphics[width=0.7\textwidth]{sr_gan}
+\end{frame}
+
+\begin{frame} \frametitle{Evaluation SR Adversarial Failure Case}
+  
+\end{frame}
+
+\begin{frame} \frametitle{Evaluation SR: Segmentation}
+  \begin{columns}
+  \begin{column}{0.33\linewidth}
+      \centering
+      \begin{figure}[htb]
+        \centering
+        \includegraphics[width=1.0\textwidth]{segmentation_gt}
+        \caption*{Segmentation GT}
+      \end{figure}
+    \end{column}
+  \begin{column}{0.33\linewidth}
+      \centering
+      \begin{figure}[htb]
+        \centering
+        \includegraphics[width=1.0\textwidth]{segmentation_bic}
+        \caption*{Segmentation Bicubic}
+      \end{figure}
+    \end{column}
+  \begin{column}{0.33\linewidth}
+      \centering
+      \begin{figure}[htb]
+        \centering
+        \includegraphics[width=1.0\textwidth]{segmentation_nogan}
+        \caption*{Segmentation (no GAN)}
+      \end{figure}
+    \end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame} \frametitle{Evaluation Deblurring: Metrics}
+  
+\end{frame}
+
+\begin{frame} \frametitle{Evaluation Deblurring: Images}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Evaluation: Intraoperative}
+  
+\end{frame}
+
+\begin{frame} \frametitle{Evaluation: Speed SR}
+ \includegraphics[width=1.0\textwidth]{time_upscaling}
+\end{frame}
+
+\begin{frame} \frametitle{Evaluation: Speed Deblurring}
+ \includegraphics[width=1.0\textwidth]{time_denoising}
+\end{frame}
+
+
+\begin{frame}{Summary}
+\begin{itemize}
+  \item TODO
+  \item TODO
+\end{itemize}
+
+\end{frame}
+
+\end{document}
