@@ -43,7 +43,7 @@ def time_model_single(model, img_size, n_times, num_output):
 def time_model(model, model_name, sizes=[16,32,64]):
     results = []
     for size in sizes:
-        num_outputs = [1,2] if model_name != 'unet' else [1]
+        num_outputs = [1,2] if model_name != 'unet' else [2]
         for num_output in num_outputs:
             print(model_name, size, num_output)
             result = time_model_single(model, img_size=size, n_times=10, num_output=num_output)
