@@ -120,9 +120,12 @@ class LapSRN(nn.Module):
         self.image_reconstruction0 = ImageReconstruction(upsample=upsample)
         self.image_reconstruction1 = ImageReconstruction(upsample=upsample)
 
-    def forward(self, image):
+    def forward(self, image, num_output=2):
         features0 = self.feature_extraction0(self.in_conv(image))
         hr2 = self.image_reconstruction0(image, features0)
+
+        if num_output == 1:
+            return hr2
         
         features1 = self.feature_extraction1(features0)
         hr4 = self.image_reconstruction1(hr2, features1) 

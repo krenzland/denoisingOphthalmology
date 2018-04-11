@@ -23,9 +23,12 @@ def time_model_single(model, img_size, n_times):
         start_event = torch.cuda.Event(enable_timing=True)
         end_event = torch.cuda.Event(enable_timing=True)
         
-        start_event.record()
-
-        up = model(img)
+        if num_output == 1:
+            start_event.record()
+            up = model(img, num_output=1)
+        else:
+            start_event.record()
+            up = model(img)
         
         end_event.record()
         end_event.synchronize()        
@@ -40,9 +43,11 @@ def time_model_single(model, img_size, n_times):
 def time_model(model, model_name, sizes=[16,32,64]):
     results = []
     for size in sizes:
-        print(model_name, size)
-        result = time_model_single(model, img_size=size, n_times=15)
-        results.append((model_name, size, result))
+        num_outputs = [1,2] if model_name != 'unet' else [1]
+        for num_output in num_outputs:
+            print(model_name, size, num_output)
+            result = time_model_single(model, img_size=size, n_times=10, num_output=num_output)
+            results.append((model_name, size, num_output, result))
     return results
 
 def get_img(img_size):
@@ -66,7 +71,7 @@ def main():
     del lap_srn
 
     df = pd.DataFrame(np.vstack((unet_times, lap_deblur_times, lap_srn_times)))
-    df.columns = ['model', 'img_size', 'time']
+    df.columns = ['model', 'img_size', 'num_outputs', 'time']
 
     df.to_csv('times.csv', index=None)
 
