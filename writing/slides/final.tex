@@ -161,7 +161,7 @@
   \label{eq:total-loss}
 L_\text{total}(\hat{\img}, \img) = \frac{1}{3 W_f H_f}
 \left( \sum_{\img, \hat{\img}}
-  5 L_{\text{sal}} (\img, \hat{\img}) + 0.12  L_p(\img, \hat{\img}) \right) + \lambda L_a
+  5 L_{\text{sal}} (\hat{\img}, \img) + 0.12  L_p(\hat{\img}, \img) \right) + \lambda L_a
 \end{equation}
 Linear combination of saliency loss ($L_\text{sal}$), perceptual loss ($L_p$) and adversarial loss ($L_a$).
 
