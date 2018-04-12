@@ -79,17 +79,6 @@
 \begin{document}
 \maketitle
 
-% \begin{frame}
-%   \frametitle{Example Use-Case: Digital Window}
-%    \begin{figure}[h]
-%     \centering
-%     \movie[width=0.9735\textwidth, height=0.55\textwidth, autostart,, loop, poster]{}{digitalwindow.mp4}
-%     \caption*{Digital Window}
-%     \label{fig:digital-window}
-%   \end{figure}
-% \end{frame}
-
-
 \begin{frame}{Goals}
 \begin{block}{Idea}
 \begin{itemize}
@@ -289,27 +278,26 @@ with $P_r$ real patch distribution and $P_g$ generated patch distribution
 \end{frame}
 
 \begin{frame} \frametitle{Evaluation SR: Metrics}
- \begin{table}[]
-\centering
-\caption{Results for super resolution models on Drive (Test) dataset.
-  AUC corresponds to area under the receiver-operator curve achieved by running the retina-unet on the upscaled images.
-  Best results are bold.
-}
+% \begin{table}[]
+% \centering
+% \caption{Results for super resolution models on Drive (Test) dataset.
+%   AUC corresponds to area under the receiver-operator curve achieved by running the retina-unet on the upscaled images.
+%   Best results are bold.
+% }
 
-\label{tab:results-sr}
-\begin{tabular}{@{}lS[table-format=2.3]S[table-format=2.3]S[table-format=2.3]S[table-format=2.3]@{}}
-\toprule
-{Model} & {PSNR} & {SSIM} & {Sobel \textsc{mse} \SI{1e4}{}} & {AUC UNet} \\ \midrule
-Ground Truth & $\infty$ & 1.0 & 0.0 & 0.979 \\
-Bicubic & 35.00 & 0.909 & 29.294 &  0.852 \\
-Full & 0.0 & 0.0 & 0.0 & 0.0 \\
-Sal.\ + Perc\  & 0.0 & 0.0 & 0.0 & 0.946 \\
-Saliency & 0.0 & 0.0 & 0.0 & 0.921 \\
-Perceptual & 0.0 & 0.0 & 0.0 & 0.943 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
+% \label{tab:results-sr}
+% \begin{tabular}{@{}lS[table-format=2.2]S[table-format=2.2]S[table-format=2.2]S[table-format=2.3]@{}}
+% \toprule
+% {Model} & {PSNR} & {SSIM} & {Sobel \textsc{mse} \SI{1e4}{}} & {AUC UNet} \\ \midrule
+% Ground Truth & $\infty$ & 1.0 & 0.0 & 0.979 \\
+% Bicubic & 35.27 & 0.92 & 29.87 &  0.852 \\
+% Full & 38.85 & 0.93 & 8.29 & \textbf{0.948} \\
+% Saliency + Perceptual & 39.20 & 0.93 & \textbf{7.84} & 0.946 \\
+% Saliency & \textbf{39.50} & \textbf{0.94} & 8.55 & 0.921 \\
+% Perceptual & 38.90 & 0.93 & 8.61 & 0.943 \\
+% \bottomrule
+% \end{tabular}
+% \end{table}
 \end{frame}
 
 \begin{frame} \frametitle{Evaluation SR Images}
@@ -350,8 +338,10 @@ Perceptual & 0.0 & 0.0 & 0.0 & 0.943 \\
 \end{columns}
 \end{frame}
 
-\begin{frame} \frametitle{Evaluation Deblurring: Metrics}
-  
+\begin{frame} \frametitle{Evaluation Deblurring: Metric (Segmentation)}
+  \includegraphics{deblur_auc_beamer}
+
+  Segmentation using blurred image (radius 3): ROC of 0.654
 \end{frame}
 
 \begin{frame} \frametitle{Evaluation Deblurring: Images}
@@ -365,18 +355,21 @@ Perceptual & 0.0 & 0.0 & 0.0 & 0.943 \\
 \end{frame}
 
 \begin{frame} \frametitle{Evaluation: Speed SR}
- \includegraphics[width=1.0\textwidth]{time_upscaling}
+  \includegraphics{time_upscaling_beamer}
+
 \end{frame}
 
 \begin{frame} \frametitle{Evaluation: Speed Deblurring}
- \includegraphics[width=1.0\textwidth]{time_denoising}
+  \includegraphics{time_denoising_beamer}
 \end{frame}
 
 
 \begin{frame}{Summary}
 \begin{itemize}
-  \item TODO
-  \item TODO
+  \item Solid results for both super-resolution and deblurring
+  \item Usable as pre-processor
+  \item Choice of loss function matters
+  \item Real-time usage limited but possible
 \end{itemize}
 
 \end{frame}

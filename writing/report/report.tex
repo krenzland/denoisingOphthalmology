@@ -23,6 +23,7 @@
 \sisetup{detect-weight=true,detect-inline-weight=math}
 
 
+\usepackage{float}
 \usepackage{subcaption}
 \usepackage{bm}
 \usepackage{amsmath}
@@ -543,9 +544,34 @@ Full & 38.85 & 0.93 & 8.29 & 98.51 & \bftabnum 0.948 \\
 \todo{Explain padding of images: div. by 4 for sr, by 16 for unet, reflect pad, remove stripe of size factor for everything except unet}
 \todo{Add example images and failure case}
 
+\begin{figure}[htb]
+\centering
+\includegraphics[]{deblur_complete_paper}
+\caption{Measurements on Drive(Test).
+  Blur radius vs.\ metric.\\
+Segmentation on blurred images directly leads to an AUC of 0.96, 0.83 and 0.65 respectively.}
+\label{fig:benchmark}
+\end{figure}
 % \todo{PSNR table}
 \todo{Segmentation table: Frangi}
 \todo{Evaluate speed}
+
+\begin{figure}[htb]
+\centering
+\begin{subfigure}{0.45\textwidth}
+\centering
+    \includegraphics[]{time_upscaling_paper}
+    \caption{Speed for upscaling}
+\end{subfigure}\quad\qquad%
+\begin{subfigure}{0.45\textwidth}
+\centering
+    \includegraphics{time_denoising_paper}
+    \caption{Speed for denoising}
+\end{subfigure}
+\caption{Frames per second vs.\ input image size.
+Measured on a Titan X.}
+\label{fig:benchmark}
+\end{figure}
 
 \section{Summary}
 \todo{write summary}
@@ -577,7 +603,6 @@ The algorithms satisfy all our constraints:
 \item All networks except the ones trained with adversarial loss retain the structure of blood vessels.
   They can thus be used for medical purposes.
 \end{itemize}
-
 
 \printbibliography
 \end{document}
