@@ -53,6 +53,11 @@
 \usepackage{mathtools} % for \mathclap
 \usepackage{varioref}
 \usepackage{siunitx}
+\newrobustcmd*{\bftabnum}{%
+  \bfseries
+  \sisetup{output-decimal-marker={\textmd{.}}}%
+}
+\sisetup{detect-weight=true,detect-inline-weight=math}
 \usepackage{hyperref}
 \usepackage[noabbrev]{cleveref}
 \newcommand{\creflastconjunction}{, and\nobreakspace} % use Oxford comma
@@ -103,7 +108,18 @@
 \end{block}
 \end{frame}
 
-\begin{frame}{Architectures - Generators\footfullcite{LapSRN}}
+\begin{frame}{Overview}
+  I've $\dots$
+  \begin{itemize}
+  \item decided on a super-resolution architecture that fulfils speed-quality trade-off
+  \item chose a combination of loss functions that results in visually pleasing and correct images
+  \item chose a discriminator architecture that reduces high-frequency noise
+  \item modified generator for deblurring
+  \item evaluated
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Architectures: Generators\footfullcite{LapSRN}}
  \begin{figure}[htb]
   \centering
   \begin{subfigure}[b]{0.45\textwidth}
@@ -118,39 +134,42 @@
   \caption*{
     Blue and gray: input and output images
 
-    Black lines: convolutions.\qquad
-    Blue lines: identity function.
+    $\bm{\ast}$: convolutions\qquad
+    $\bm{\uparrow}$ resize-convolution\qquad
+    $\bm{+}$ element-wise addition
 
-    Red lines: to resize-convolutions.
-    Plus: element-wise addition
+    LapSRN: depth $2 \times 10$, LapDeblur: depth $2 \times 5$
   }
 \end{figure}
  
 \end{frame}
 
-\begin{frame}{Architectures - Discriminator\footfullcite{PatchGAN}}
+\begin{frame}{Architectures: Discriminator\footfullcite{PatchGAN}}
   \begin{center}
-    \includegraphics[width=0.4\textwidth]{{nn_patchd}}
+    \includegraphics[width=0.6\textwidth]{{nn_patchd}}
   \end{center}
-    
+  $\vert \cdots \vert$ indicates instance normalization
 
-Solid/dashed lines: convolutions with and without instance normalisation
+  $ \bm{\downarrow} $: convolution with stride 2
 
-Red lines: stride 2\qquad Black Lines stride 1.
+  $ \bm{\ast} $: convolution with stride 1
+
 \end{frame}
 
 \begin{frame} \frametitle{Loss Functions 0: The ensemble\footfullcite{SaliencyGAN}}
 \begin{equation}
   \label{eq:total-loss}
-\sum_{\img, \hat{\img}}
-\frac{1}{3 W_{\img} H_{\img}}
-  \left( 5 L_{\text{sal}} (\img, \hat{\img}) + 0.12  L_p(\img, \hat{\img}) \right) + 0.1 L_a
+L_\text{total}(\hat{\img}, \img) = \frac{1}{3 W_f H_f}
+\left( \sum_{\img, \hat{\img}}
+  5 L_{\text{sal}} (\img, \hat{\img}) + 0.12  L_p(\img, \hat{\img}) \right) + \lambda L_a
 \end{equation}
 Linear combination of saliency loss ($L_\text{sal}$), perceptual loss ($L_p$) and adversarial loss ($L_a$).
 
-$\img$: real image, $\hat{\img}$ super-resolved/denoised image
+$\img$: real image, $\hat{\img}$ super-resolved/deblurred image
 
-normalized by image size $3 W_{\img} H_{\img}$
+normalized by image size $3 W_f H_f$
+
+$\lambda_a = 0.01$ for super-resolution and $\lambda_a = 0.1$ for denoising
 \end{frame}
 
 
@@ -223,15 +242,13 @@ Finally,
 Linear combination of uniqueness  maps in $7 \times 7$ neighborhood
  \begin{equation}
   \label{eq:uniq}
-  U(m) = \sum_{o \in P_c} w(c, o) \vert m(c) - m(o) \vert,
+  U(m) = \sum_{o \in P_c} w(c, o) \vert m(c) - m(o) \vert
 \end{equation}
 $w(c, o)$ decays exponentially for larger pixel distance between center $c$ and other $o$ 
 
 \end{column} 
 \end{columns}
 \end{frame}
-
-
 
 \begin{frame}{Loss Functions 2: Perceptual Loss\footfullcite{PerceptualLoss}}
   Compare visual features
@@ -242,7 +259,7 @@ $w(c, o)$ decays exponentially for larger pixel distance between center $c$ and 
  
 \begin{equation}
   \label{eq:perceptual-loss}
-  L_p(\img, \hat{\img}) = \sum_{\mathclap{l \in \{ \text{pool}_1, \text{pool}_2 \}}} \Vert \phi_l( \bm{\hat{y}} ) - \phi_l (\bm{y}) \Vert_2^2
+  L_p(\hat{\img}, \img) = \sum_{\mathclap{l \in \{ \text{pool}_1, \text{pool}_2 \}}} \Vert \phi_l( \hat{\img} ) - \phi_l (\img) \Vert_2^2
 \end{equation}
 \end{frame}
 
@@ -262,51 +279,40 @@ with $P_r$ real patch distribution and $P_g$ generated patch distribution
 \end{frame}
 
 \begin{frame}{Evaluation}
-  Normally: Compare pixel-wise reconstruction error
-
-  \textbf{Difficult} in our case
-
-  Perceptual \textit{\&} adversarial loss improve perceived quality but increase error!
+  Perceptual \textit{\&} adversarial loss improve perceived quality but increase mse!
 
   Use:
   \begin{itemize}
-  \item PSNR, pixel pased
-  \item SSIM, human-perception model
+  \item PSNR, pixel based
+  \item SSIM\footfullcite{Ssim}, human perception based model
   \item Pixel-based error of Sobel filter (gradients)
   \item Vessel segmentation on Drive dataset\footfullcite{Drive} with retina-unet\footfullcite{RetinaUnet}
   \end{itemize}
+
+  Compare super-resolution with bicubic interpolation \textit{\&} deblurring with an mse unet\footfullcite{Unet}.
 \end{frame}
 
 \begin{frame} \frametitle{Evaluation SR: Metrics}
-% \begin{table}[]
-% \centering
-% \caption{Results for super resolution models on Drive (Test) dataset.
-%   AUC corresponds to area under the receiver-operator curve achieved by running the retina-unet on the upscaled images.
-%   Best results are bold.
-% }
+\begin{table}[htb]
+\centering
+\caption{Results for super resolution models on Drive (Test) dataset.
+  AUC corresponds to area under the ROC curve achieved by running the retina-unet on the upscaled images.
+  Best results are bold.
+}
 
-% \label{tab:results-sr}
-% \begin{tabular}{@{}lS[table-format=2.2]S[table-format=2.2]S[table-format=2.2]S[table-format=2.3]@{}}
-% \toprule
-% {Model} & {PSNR} & {SSIM} & {Sobel \textsc{mse} \SI{1e4}{}} & {AUC UNet} \\ \midrule
-% Ground Truth & $\infty$ & 1.0 & 0.0 & 0.979 \\
-% Bicubic & 35.27 & 0.92 & 29.87 &  0.852 \\
-% Full & 38.85 & 0.93 & 8.29 & \textbf{0.948} \\
-% Saliency + Perceptual & 39.20 & 0.93 & \textbf{7.84} & 0.946 \\
-% Saliency & \textbf{39.50} & \textbf{0.94} & 8.55 & 0.921 \\
-% Perceptual & 38.90 & 0.93 & 8.61 & 0.943 \\
-% \bottomrule
-% \end{tabular}
-% \end{table}
-\end{frame}
-
-\begin{frame} \frametitle{Evaluation SR Images}
-  \centering
- \includegraphics[width=0.7\textwidth]{sr_gan}
-\end{frame}
-
-\begin{frame} \frametitle{Evaluation SR Adversarial Failure Case}
-  
+\label{tab:results-sr-drive}
+\begin{tabular}{@{}lS[table-format=2.2]S[table-format=2.2]S[table-format=2.2]S[table-format=2.3]@{}}
+\toprule
+{Model} & {PSNR} & {SSIM} & {Sobel-mse \SI{1e4}{}} & {AUC} \\ \midrule
+Ground Truth & $\infty$ & 1.00 & 0.00 & 0.979 \\
+Bicubic & 35.27 & 0.92 & 29.87 &  0.852 \\
+Perceptual & 38.90 & 0.93 & 8.61 & 0.943 \\
+Saliency & \bftabnum 39.50 & \bftabnum 0.94 & 8.55 & 0.921 \\
+Saliency + Perceptual & 39.20 & 0.93 &\bftabnum 7.84 & 0.946 \\
+Full & 38.85 & 0.93 & 8.29 & \bftabnum 0.948 \\
+\bottomrule
+\end{tabular}
+\end{table}
 \end{frame}
 
 \begin{frame} \frametitle{Evaluation SR: Segmentation}
@@ -315,8 +321,8 @@ with $P_r$ real patch distribution and $P_g$ generated patch distribution
       \centering
       \begin{figure}[htb]
         \centering
-        \includegraphics[width=1.0\textwidth]{segmentation_gt}
-        \caption*{Segmentation GT}
+        \includegraphics[width=1.0\textwidth]{segmentation_hr}
+        \caption*{Segmentation HR}
       \end{figure}
     \end{column}
   \begin{column}{0.33\linewidth}
@@ -331,32 +337,86 @@ with $P_r$ real patch distribution and $P_g$ generated patch distribution
       \centering
       \begin{figure}[htb]
         \centering
-        \includegraphics[width=1.0\textwidth]{segmentation_nogan}
-        \caption*{Segmentation (no GAN)}
+        \includegraphics[width=1.0\textwidth]{segmentation_gan}
+        \caption*{Segmentation SR}
       \end{figure}
     \end{column}
 \end{columns}
 \end{frame}
 
+\begin{frame} \frametitle{Evaluation SR: Bicubic vs.\ Saliency }
+\includegraphics[width=0.48\linewidth]{patch_sr1_bic}\quad
+\includegraphics[width=0.48\linewidth]{patch_sr1_sal}
+\end{frame}
+
+\begin{frame} \frametitle{Evaluation SR: Saliency vs.\ Perceptual }
+\includegraphics[width=0.48\linewidth]{patch_sr1_sal}\quad
+\includegraphics[width=0.48\linewidth]{patch_sr1_perc}
+\end{frame}
+
+\begin{frame} \frametitle{Evaluation SR: Perceptual vs.\ (Saliency + Perceptual) }
+\includegraphics[width=0.48\linewidth]{patch_sr1_perc}\quad
+\includegraphics[width=0.48\linewidth]{patch_sr1_sal_perc}
+\end{frame}
+
+\begin{frame} \frametitle{Evaluation SR: (Saliency + Perceptual) vs.\ Full }
+\includegraphics[width=0.48\linewidth]{patch_sr1_sal_perc}\quad
+\includegraphics[width=0.48\linewidth]{patch_sr1_gan}
+\end{frame}
+
+\begin{frame} \frametitle{Evaluation SR: Full vs.\ GT }
+\includegraphics[width=0.48\linewidth]{patch_sr1_gan}\quad
+\includegraphics[width=0.48\linewidth]{patch_sr1_gt}
+\end{frame}
+
+\begin{frame} \frametitle{Evaluation SR: Artefacts (Saliency + Perceptual) }
+  \centering
+\includegraphics[width=0.7\linewidth]{patch_sr1_sal_perc_small}
+\end{frame}
+
+\begin{frame} \frametitle{Evaluation SR: Artefacts (Full) }
+  \centering
+\includegraphics[width=0.7\linewidth]{patch_sr1_gan_small}
+\end{frame}
+
+
 \begin{frame} \frametitle{Evaluation Deblurring: Metric (Segmentation)}
   \includegraphics{deblur_auc_beamer}
 
-  Segmentation using blurred image (radius 3): ROC of 0.654
+  Segmentation using blurred image (radius 3): AUC of 0.654
 \end{frame}
 
-\begin{frame} \frametitle{Evaluation Deblurring: Images}
-
-\end{frame}
-
-
-\begin{frame}
-  \frametitle{Evaluation: Intraoperative}
-  
+\begin{frame} \frametitle{Evaluation Deblurring: Image}
+  \begin{columns}
+  \begin{column}{0.33\linewidth}
+      \centering
+      \begin{figure}[htb]
+        \centering
+        \includegraphics[width=1.0\textwidth]{deblur_lr}
+        \caption*{Blur radius 3}
+      \end{figure}
+    \end{column}
+  \begin{column}{0.33\linewidth}
+      \centering
+      \begin{figure}[htb]
+        \centering
+        \includegraphics[width=1.0\textwidth]{deblur_gan}
+        \caption*{GAN}
+      \end{figure}
+    \end{column}
+  \begin{column}{0.33\linewidth}
+      \centering
+      \begin{figure}[htb]
+        \centering
+        \includegraphics[width=1.0\textwidth]{deblur_gt}
+        \caption*{GT}
+      \end{figure}
+    \end{column}
+\end{columns}
 \end{frame}
 
 \begin{frame} \frametitle{Evaluation: Speed SR}
   \includegraphics{time_upscaling_beamer}
-
 \end{frame}
 
 \begin{frame} \frametitle{Evaluation: Speed Deblurring}
@@ -369,9 +429,13 @@ with $P_r$ real patch distribution and $P_g$ generated patch distribution
   \item Solid results for both super-resolution and deblurring
   \item Usable as pre-processor
   \item Choice of loss function matters
+  \item Ensemble of loss functions good compromise
   \item Real-time usage limited but possible
 \end{itemize}
 
+\centering
+\includegraphics[width=0.6\linewidth]{collage_sr1_bic}\\
+\includegraphics[width=0.6\linewidth]{collage_sr1_gan}
 \end{frame}
 
 \end{document}
