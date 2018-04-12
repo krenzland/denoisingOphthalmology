@@ -14,6 +14,15 @@
 \usepackage{caption}
 \usepackage{booktabs}
 \usepackage{siunitx}
+\usepackage{etoolbox}
+
+\newrobustcmd*{\bftabnum}{%
+  \bfseries
+  \sisetup{output-decimal-marker={\textmd{.}}}%
+}
+\sisetup{detect-weight=true,detect-inline-weight=math}
+
+
 \usepackage{subcaption}
 \usepackage{bm}
 \usepackage{amsmath}
@@ -354,11 +363,12 @@ The total loss function is then
   \label{eq:total-loss}
 \sum_{\img, \hat{\img}}
 \frac{1}{3 W_{\img} H_{\img}}
-  \left( 5 L_{\text{sal}} (\img, \hat{\img}) + 0.12  L_p(\img, \hat{\img}) \right) + 0.1 L_a,
+  \left( 5 L_{\text{sal}} (\img, \hat{\img}) + 0.12  L_p(\img, \hat{\img}) \right) + \lambda L_a,
 \end{equation}
 where the sum runs over all model outputs \(\hat{\img}\) and the corresponding ground truth \(\img\).
 All losses are normalised by number of channels (3), image height \(H_{\img}\) and width \(W_{\img}\).
-The weights for saliency and perceptual loss are chosen such that they are of similar size, the weight for the adversarial loss is chosen empirically.
+The weights for saliency and perceptual loss are chosen such that they are of similar size.
+We empirically chose an adversarial weight $\lambda$ of 0.01 and 0.1 for super-resolution and deblurring respectively.
 
 \section{Implementation \textit{\&} Training}
 \todo{Weight init.}
@@ -411,8 +421,7 @@ This is the normalisation that is expected from the pre-trained VGG-16 network.
 We use a batch size of $64$ for all experiments.
 An epoch thus consists of $15$ gradient updates.
 
-All weights of the generator are initialised with Xavier initialisation, all weights of the generator are drawn from a normal distribution with mean zero and variance of 0.02. 
-\todo{Cite xavier init!}
+All weights of the generator are initialised with Xavier initialisation~\cite{Xavier}, all weights of the generator are drawn from a normal distribution with mean zero and variance of 0.02. 
 We first train solely the generator without adversarial loss.
 It is optimized by \textsc{adam}~\cite{Adam} with an initial learning rate of $1r-3$ for the super-resolution network and $1e-4$ for the deblurring network.
 We use a weight decay of $1e-4$.
@@ -432,6 +441,8 @@ The deblurring network took 1d10h without adversarial loss and an additional 1d2
 \section{Evaluation}
 We use the \textsc{mse}-based metric \textsc{psnr} to compare images on a pixel-wise basis.
 Additionally, we use the structural similarity(\textsc{ssim})~\cite{Ssim} which uses a model based on human perception.
+We apply these metrics on the \textsc{rgb} images, without converting to grayscale.
+\todo{We are not - why?}
 For our chosen application, the correct reconstruction of image gradients is important, for example to enhance the border of the retina membrane.
 To do this, we compute the gradient magnitude with a Sobel filter and compare the reconstruction.
 
@@ -446,22 +457,20 @@ For this we use two methods:
 \item As an example for a state-of-the art deep-learning based algorithm we use~\cite{RetinaUnet}.
   It is based on the UNet-architecture~\cite{Unet}.
 \end{enumerate}
-We evaluate this on the testing set of the DRIVE dataset~\cite{Drive}.
-
+We evaluate this on the testing set of the DRIVE dataset~\cite{Drive}, for which a ground truth segmentation is available.
 We compare the super resolution network with bicubic interpolation.
 
-To evaluate the effectiveness of our chosen loss function, we have trained different combinations with the same settings.
+To evaluate the effectiveness of our chosen loss function, we trained different combinations with the same training schedule (e.g.\ learning rate, augmentations).
 \begin{description}
 \item[Saliency] The saliency weighted $L_1$-loss leads to an accurate, albeit blurry, reconstruction of important features of the fundus.
   Some textural details are missing and edges of vessels are not clear.
 \item[Perceptual] The perceptual loss results in lower \textsc{psnr}.
-  The images are more realistic and more visually pleasing.
+  The images are more realistic and visually more pleasing.
   It introduces regular artifacts.
 \item[Saliency \textit{\&} Perceptual] Combining both losses leads to the best pixel-wise error while still achieving a perceptual convincing reconstruction.
   The artifacts of the perceptual loss are still visible but with a smaller intensity.
 \item[Saliency \textit{\&} Perceptual \textit{\&} Adversarial]
-  \todo{Not true yet, theoretically true.}
-  The addition of the adversarial loss improves the reconstruction of texture, the images are less blurry.
+  The addition of the adversarial loss improves the reconstruction of texture, the images are sharper.
   Additionally, it removes the artifacts introduced by the perceptual loss.
   The downside of this loss is the loss of accuracy:
   Instead of predicting the average image it guesses some details.
@@ -475,32 +484,59 @@ The results for the Drive dataset~\cite{Drive} can be seen in~\cref{tab:results-
 
 The deblurring network is compared to a standard \textit{UNet} architecture~\cite{Unet} with \textsc{mse} loss, trained in the same manner as our network.
 In the implementation that we are using\todo{Link to github?}, the feature maps for the skip connections are not cropped but rather padded such that they have the same shape.
-This is a common architecure for bio-medical applications and similar architectures have been used successfully as generators for image-translation tasks~\cite{PatchGAN}.
+This is a common architecure for bio-medical applications and similar architectures are used successfully as generators for image-translation tasks~\cite{PatchGAN}.
 \todo{Evaluate deblurring}
 
 Finally, we look at the visual quality of the upscaling of intraoperative pictures.
 These images differ strongly to the images seen by the network, it is thus an instance of transfer learning.
+We can see that there is only a neglible difference between bicubic interpolation and our approach.
+A possible reason for this could be that the training data differs too much from the testing data in this case.
+This could be rectified by training with more realistic data.
 \todo{Intraoperative}
-$\cdot$
+$\cdots$
 
+\begin{table}[htb]
+\centering
+\caption{Results for super resolution models on the Messidor dataset for both possible upsizing factors.
+  The full model is not compared for the $2\times$ model because the adversarial loss is only applied to the largest output image.
+  Best results are bold.
+}
 
-\begin{table}[]
+\label{tab:results-sr-messidor}
+\begin{tabular}{@{}llS[table-format=2.2]S[table-format=2.3]S[table-format=2.2]@{}}
+\toprule
+{Model} & {Factor} & {PSNR} & {SSIM} & {Sobel \textsc{mse} \SI{1e4}{}}\\ \midrule
+Bicubic & 2 & 44.67 & 0.972 & 2.56 \\
+Perceptual & 2 & 42.21 & 0.945 & 1.25 \\
+Saliency & 2 & 45.30 & 0.973 & 1.33 \\
+Saliency + Perceptual & 2 & 44.83 & 0.969 & \bftabnum 1.22 \\ \midrule
+
+Bicubic & 4 & 40.69 & \bftabnum 0.951 & 8.35 \\
+Perceptual & 4 & 42.22 & 0.943 & 2.53 \\
+Saliency & 4 & 42.82 & \bftabnum 0.953 & 3.59 \\
+Saliency + Perceptual & 4 & 42.23 & \bftabnum 0.945 & \bftabnum 2.51 \\
+Full & 4 & 41.78 & 0.942 & 2.64 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htb]
 \centering
 \caption{Results for super resolution models on Drive (Test) dataset.
   AUC corresponds to area under the receiver-operator curve achieved by running the retina-unet on the upscaled images.
   Best results are bold.
 }
 
-\label{tab:results-sr}
-\begin{tabular}{@{}lS[table-format=2.2]S[table-format=2.2]S[table-format=2.2]S[table-format=2.3]@{}}
+\label{tab:results-sr-drive}
+\begin{tabular}{@{}lS[table-format=2.2]S[table-format=2.2]S[table-format=2.2]S[table-format=2.3]S[table-format=2.3]@{}}
 \toprule
-{Model} & {PSNR} & {SSIM} & {Sobel \textsc{mse} \SI{1e4}{}} & {AUC UNet} \\ \midrule
-Ground Truth & $\infty$ & 1.0 & 0.0 & 0.979 \\
-Bicubic & 35.27 & 0.92 & 29.87 &  0.852 \\
-Full & 38.41 & 0.92 & 8.77 & 0.941 \\
-Saliency + Perceptual & 39.20 & 0.93 & 7.84 & 0.946 \\
-Saliency & 39.50 & 0.94 & 8.55 & 0.921 \\
-Perceptual & 38.90 & 0.93 & 8.61 & 0.943 \\
+{Model} & {PSNR} & {SSIM} & {Sobel \textsc{mse} \SI{1e4}{}} & {Frangi Reconstruction Acc.} & {AUC UNet} \\ \midrule
+Ground Truth & $\infty$ & 1.0 & 0.0 & 1.0 & 0.979 \\
+Bicubic & 35.27 & 0.92 & 29.87 & 97.05 & 0.852 \\
+Perceptual & 38.90 & 0.93 & 8.61 & \bftabnum 98.62 & 0.943 \\
+Saliency & \bftabnum 39.50 & \bftabnum 0.94 & 8.55 & 98.35 & 0.921 \\
+Saliency + Perceptual & 39.20 & 0.93 &\bftabnum 7.84 & \bftabnum 98.62 & 0.946 \\
+Full & 38.85 & 0.93 & 8.29 & 98.51 & \bftabnum 0.948 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -508,12 +544,40 @@ Perceptual & 38.90 & 0.93 & 8.61 & 0.943 \\
 \todo{Add example images and failure case}
 
 % \todo{PSNR table}
-\todo{Segmentation table, Frangi AND Retina-U-NEt}
+\todo{Segmentation table: Frangi}
 \todo{Evaluate speed}
 
 \section{Summary}
-$\cdots$
 \todo{write summary}
+% \begin{enumerate}
+% \item We compare different loss functions and their suitability for medical image denoising.
+% \item We present models that are able to reconstruct images detoriated by both mentioned downsampling operators in real-time.
+% \item We evaluate the resulting algorithms on both diagnostic and intraoperative images and discuss their robustness against Blur.
+%   This is combined with a discussion of the effectiveness of our transfer learning approach.
+% \end{enumerate}
+
+The presented models work well for diagnostic images.
+They are efficient and result in both faithful and perceptual satisfying images.
+While the individual loss functions result in good reconstructions, our chosen combination is clearly superior by all used metrics.
+The adversarial loss leads to images that are more smooth but deviate from the data, sometimes introducing additional vessels or other artefacts.
+
+The algorithms satisfy all our constraints:
+% \begin{enumerate}
+% \item All processing should happen in real time.
+% \item It has to work with images of varying quality, level of zoom and different positions of surgical instruments.
+% \item The anatomical structure, the position of surgical instruments, and the color have to be conserved.
+% Both blood vessels and the border of the membrane should be at least as clearly visible as in the original images.
+% This implies that we have to preserve the image edges.
+% \end{enumerate}
+\begin{itemize}
+\item The algorithms work in real-time for small patch sizes.
+  If a faster speed is desired our super-resolution network is also able to output $2\times$ resolved images.
+\item The deblurring network is robust to different levels of blur.
+  It is able to improve the segmentation results on all tested blur intensities.
+\item All networks except the ones trained with adversarial loss retain the structure of blood vessels.
+  They can thus be used for medical purposes.
+\end{itemize}
+
 
 \printbibliography
 \end{document}
