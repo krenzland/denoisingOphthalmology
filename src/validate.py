@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import argparse
 import time
 
 import numpy as np
@@ -15,6 +16,7 @@ from skimage.io._plugins.pil_plugin import pil_to_ndarray, ndarray_to_pil
 
 #from dataset import Dataset, Split, SplitDataset, get_lr_transform, get_hr_transform
 from models.lap_srn import LapSRN
+from models.unet import UNet
 
 def upsample_tensor(model, lr, return_time=False, to_normalize=False, factor=4):      
     mean=np.array([0.485, 0.456, 0.406])
@@ -57,6 +59,37 @@ def upsample_bic(lr):
     hr2 = lr.resize(2*lr_size, Image.BICUBIC)
     hr4 = lr.resize(4*lr_size, Image.BICUBIC)
     return hr2, hr4
+
+def deblur_tensor(model, lr, return_time=True, to_normalize=False):      
+    mean=np.array([0.485, 0.456, 0.406])
+    std=np.array([0.229, 0.224, 0.225])
+    normalize = Normalize(mean=mean, std=std)
+    to_tensor = ToTensor()
+    
+    # First create appropiate input image
+    lr = to_tensor(lr)
+    if to_normalize:
+        lr = normalize(lr)
+        
+    lr = Variable(lr, volatile=True).cuda().unsqueeze(0)     
+    def denormalize(out):
+        # Undo input[channel] = (input[channel] - mean[channel]) / std[channel]
+        for t, m, s in zip(out, mean, std):
+            t.mul_(s)
+            t.add_(m)
+        return out.clamp(0,1)
+    
+    deblurred = model(lr)
+    
+    deblurred = denormalize(deblurred[-1].squeeze(0).cpu().data)
+    
+    elapsed_time = 0 # not used
+
+    if return_time:
+        return elapsed_time, deblurred
+    else:
+        return deblurred
+
 
 def residual(y, y_hat, transform=lambda x:x):
     y = transform(y)
@@ -180,15 +213,38 @@ def unpad(img, border, cut_off_stripe=4):
     return img
 
 def main():
-    checkpoint_dir = Path('../best_checkpoints/')
-    models = ['gan', 'saly_perc', 'saliency', 'perceptual']
+    to_pil = ToPILImage()
+
+    parser = argparse.ArgumentParser(description="Run LapSRN training.")
+    parser.add_argument('--mode', type=str, choices=['sr', 'denoise'], default='sr',
+                        help="Mode. Either denoise or sr.")
+    args = parser.parse_args()
+    mode = args.mode
+
+    if mode == 'denoise':
+        models = ['unet', 'gan', 'nogan']
+        checkpoint_dir = Path('../best_checkpoints/') / 'deblur'
+    else:
+        models = ['gan_strong', 'gan_weak', 'saly_perc', 'saliency', 'perceptual']
+        checkpoint_dir = Path('../best_checkpoints/')
     model_to_checkpoint = lambda m: checkpoint_dir / '{}.pt'.format(m) 
 
     rows = []
     for model_name in models:
         checkpoint = torch.load(model_to_checkpoint(model_name))
 
-        model = LapSRN(depth=10).cuda().eval()
+        if mode == 'denoise':
+            blur_strengths = [1,2,3]
+            cut_off_stripe = 0
+            if model_name != 'unet':
+                model = LapSRN(depth=5, upsample=False).cuda().eval()
+            else:
+                model = UNet(3).cuda().eval()
+        else:
+            blur_strengths = [0]
+            cut_off_stripe = 4
+            model = LapSRN(depth=10).cuda().eval()
+
         model.load_state_dict(checkpoint['model_state'])
 
         drive_dir = Path('../data/raw/DRIVE/test/') 
@@ -197,45 +253,59 @@ def main():
         for num in drive_range:
             num = str(num).zfill(2)
             print("Analysing image {} for model {}.".format(num, model_name))
+
             # Load one drive image with mask and ground truth segmentation.
             mask = Image.open(drive_dir / 'mask/{}_test_mask.gif'.format(num))
             img = Image.open(drive_dir / 'images/{}_test.tif'.format(num))
             gt = Image.open(drive_dir / '1st_manual/{}_manual1.gif'.format(num)).convert('YCbCr').split()[0]
 
-            to_pil = ToPILImage()
+            for blur_strength in blur_strengths:
+                print("With blur {}".format(blur_strength))
+                if mode == 'sr':
+                    # Find next largest crop size that is divisible by four.
+                    hr4_gt, border = pad(img)
+                    lr_crop_size = [s//4 for s in hr4_gt.size]
+                    lr = hr4_gt.resize(lr_crop_size, Image.BICUBIC)
+                    elapsed_time, *sr_out = upsample_tensor(model, lr, to_normalize=True, return_time=True)
 
-            # Find next largest crop size that is divisible by four.
-            hr4_gt, border = pad(img)
+                    _, hr4_sr = [unpad(to_pil(out), border, cut_off_stripe=cut_off_stripe) for out in sr_out[0]]
+                    hr4_bic = unpad(upsample_bic(lr)[-1], border)
 
-            lr_crop_size = [s//4 for s in hr4_gt.size]
-            lr = hr4_gt.resize(lr_crop_size, Image.BICUBIC)
+                else:
+                    # UNet expects images side lengths that are div. by 16
+                    # Pad switches axes
+                    new_size = (np.ceil(img.size[1]/16)*16,
+                                    np.ceil(img.size[0]/16)*16)
+                    hr4_gt, border = pad(img, new_size=new_size)
+                    lr = hr4_gt.filter(ImageFilter.GaussianBlur(blur_strength))
+                    elapsed_time, *sr_out = deblur_tensor(model, lr, to_normalize=True, return_time=True)
+                    hr4_sr = [unpad(to_pil(out), border, cut_off_stripe=cut_off_stripe) for out in sr_out][0]
+                    hr4_bic = unpad(lr, border, cut_off_stripe=cut_off_stripe)
 
-            elapsed_time, *sr_out = upsample_tensor(model, lr, to_normalize=True, return_time=True)
-            hr2_sr, hr4_sr = [unpad(to_pil(out), border) for out in sr_out[0]]
-            hr2_bic, hr4_bic = [unpad(out, border) for out in upsample_bic(lr)]
+                hr4_gt = unpad(hr4_gt, border, cut_off_stripe=cut_off_stripe)
+                psnr_sr = psnr(hr4_gt, hr4_sr)
+                psnr_bic = psnr(hr4_gt, hr4_bic)
 
-            hr4_gt = unpad(hr4_gt, border)
-            psnr_sr = psnr(hr4_gt, hr4_sr)
-            psnr_bic = psnr(hr4_gt, hr4_bic)
+                ssim_sr = ssim(hr4_gt, hr4_sr)
+                ssim_bic = ssim(hr4_gt, hr4_bic)
 
-            ssim_sr = ssim(hr4_gt, hr4_sr)
-            ssim_bic = ssim(hr4_gt, hr4_bic)
+                sobel_sr, sobel_bic = [edge_error(hr4_gt, out) * 10e4 for out in [hr4_sr, hr4_bic]]
 
-            sobel_sr, sobel_bic = [edge_error(hr4_gt, out) * 10e4 for out in [hr4_sr, hr4_bic]]
+                frangi_hr, frangi_sr, frangi_bic = [vessels(i, mask=mask).convert('YCbCr').split()[0] for i in [hr4_gt, hr4_sr, hr4_bic]]
 
-            frangi_hr, frangi_sr, frangi_bic = [vessels(i, mask=mask).convert('YCbCr').split()[0] for i in [hr4_gt, hr4_sr, hr4_bic]]
+                frangi_acc_sr, frangi_acc_bic = [acc(frangi_hr, other) for other in [frangi_sr, frangi_bic]]
+                segmentation_acc_hr, segmentation_acc_sr, segmentation_acc_bic =  [acc(unpad(gt, border=np.zeros(4, dtype=int), cut_off_stripe=cut_off_stripe),
+                                                                                       other)
+                                                                                   for other in [frangi_hr, frangi_sr, frangi_bic]]
 
-            frangi_acc_sr, frangi_acc_bic = [acc(frangi_hr, other) for other in [frangi_sr, frangi_bic]]
-            segmentation_acc_hr, segmentation_acc_sr, segmentation_acc_bic =  [acc(unpad(gt, border=np.zeros(4, dtype=int)), other) for other in [frangi_hr, frangi_sr, frangi_bic]]
+                rows += [[model_name, blur_strength, psnr_sr, psnr_bic, ssim_sr, ssim_bic, sobel_sr, sobel_bic, \
+                        frangi_acc_sr, frangi_acc_bic, segmentation_acc_hr, segmentation_acc_sr, segmentation_acc_bic]]
 
-            # TODO: Maybe add accuracy for completely black image as well, or use better measure!
-            rows += [[model_name, elapsed_time, psnr_sr, psnr_bic, ssim_sr, ssim_bic, sobel_sr, sobel_bic, \
-                      frangi_acc_sr, frangi_acc_bic, segmentation_acc_hr, segmentation_acc_sr, segmentation_acc_bic]]
-
-    columns = ['model_name', 'upscale_time', 'psnr_sr', 'psnr_bic', 'ssim_sr', 'ssim_bic', 'sobel_sr', 'sobel_bic', \
+    # bic means blurred for denoise
+    columns = ['model_name', 'blur_strength', 'psnr_sr', 'psnr_bic', 'ssim_sr', 'ssim_bic', 'sobel_sr', 'sobel_bic', \
                'frangi_acc_sr', 'frangi_acc_bic', 'segmentation_acc_hr', 'segmentation_acc_sr', 'segmentation_acc_bic']
     df = pd.DataFrame(data=rows, columns=columns)
-    df.to_csv("results.csv", index=None)
+    df.to_csv("results_{}.csv".format(mode), index=None)
  
 
 if __name__ == '__main__':

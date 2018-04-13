@@ -33,6 +33,7 @@
 \usepackage{mathtools} % for \mathclap
 \usepackage{hyperref}
 \usepackage[noabbrev]{cleveref}
+\usepackage{placeins}
 \newcommand{\creflastconjunction}{, and\nobreakspace} % use Oxford comma
 %\usepackage{placeins} % for floatbarrier
 
@@ -100,120 +101,8 @@ We make the following contributions:
 \item We evaluate the resulting algorithms with metrics and discuss the consequences for practical applications.
 \end{enumerate}
 
-% \section{Literature Review}
-% \subsection{Architectures}
-% \label{sec:architecturs}
-% Differentiate between methods optimised for quality and speed.
-% Quality mostly feeds in a upsampled image, filters for in HR-space.
-% Efficiency uses low-resolution image as input, upscales at end.
-
-% We are mostly interested in networks that use a structure that is optimized for efficiency.
-% All these structures (or at least the cited examples) have one thing in common:
-% They use the low-resolution image as input.
-% \begin{description}
-% \item[Laplacian Pyramid] Structure used by~\cite{LapSRN}.
-%   Progressive upsampling, predict subband residual for each upsampling step.
-%   Feature extraction at \textit{coarse}, not \textit{fine} level.
-%   Same network can do upsampling at different scales.
-%   Uses deep supervision, each resulting image contributes to the loss.
-% \item[Hourglass] Used for example by~\cite{Fsrcnn}.
-%   Structure of form (Feature extraction -> Shrinking -> Mapping -> Expanding -> Deconvolution).
-%   The filters (except deconvolution) are similar for different upscaling factors, makes retraining easy.
-% \item[Subpixel Convolution]  Used by~\cite{Espcn}.
-%   $L$ convolution layers for feature maps, one subpixel convolution layer with $L$ filters.
-%   In~\cite{Espcn} $L = 3$.
-% \end{description}
-
-% The following architectures/papers are optimised for quality without regarding the run-time:
-% \begin{description}
-% \item[Residual Blocks] Used for example by~\cite{EnhanceNet, SRGAN, EDSR}.
-%    In case of \textbf{EnhanceNet}: structure of form (Conv -> Residual* -> (NNUpsampling -> Conv)* -> Conv) with 10 residual blocks.
-  
-% \item[Deeply Recursive] Used by~\cite{DRCN}.
-%   Extremely expensive to train (6 days on Titan X).
-%   Training relies on several tricks.
-%   Structure of (embedding network -> recursive inference network -> reconstruction network)
-% \end{description}
-
-% More architectures are discussed in the paper~\cite{NTIRE2017} which describes a contest that was won by~\cite{EDSR}.
-% Most approaches used in this challenge are not real-time capable.
-
-% \subsection{Loss functions}
-% \label{sec:loss}
-
-% \begin{description}
-% \item[MSE] Standard pixelwise mse, optimizes PSNR, leads to blurry images
-% \item[Charbonnier-Loss] Pixelwise (differentiable approximation of) $L_1$ error, is more robust, used by~\cite{LapSRN}.
-%   Defined typically as
-%   \begin{align}
-%     \label{eq:charbonnier}
-%     L( \hat{\bm{y}}, \bm{y}; \bm{\theta}) = \sum_n p \left( \bm{\hat{y}} - \bm{y} \right)
-%     \intertext{with }
-%     p(\bm{x}) = \sqrt{ \langle x, x \rangle  + \epsilon^2},
-%   \end{align}
-%   where $\varepsilon$ is a parameter.
-% \item[Perceptual Loss] Don't compare pixel-wise but consider difference of filtered images.
-%   Can be defined for an arbitrary filter map as
-%   \begin{equation}
-%     \label{eq:perceptual-loss}
-%    L_p = \Vert \phi( \bm{\hat{y}} ) - \phi (\bm{y}) \Vert_2^2 .
-%   \end{equation}
-%   The filter maps $\phi$ are often taken from the pooling layers of the VGG-19 network, e.g. EnhanceNet uses the second and fifth~\cite{EnhanceNet}.
-%   Leads to visually better images but decreased PSNR.
-%   See~\cite{PerceptualLoss} for motivation/details.
-% \item[Saliency Loss] The same as the perceptual loss but with handcrafted filters.
-%   One example for this is~\cite{SaliencyGAN} which uses the curvature of the image, distribution of elements in a neighborhood and uniqueness of feature maps.
-%   This loss is handcrafted for vessel-detection.
-% \item[Texture Loss] Use patch-wise correlations of perceptive loss, similar to style transfer. See~\cite{EnhanceNet}.
-% \item[Adversarial Loss] Optimize linear combination of other loss and loss function learned by discriminator/critic network.
-%   Leads to visually pleasing images, reduced PSNR and might lead to ``imagined'' artifacts.
-%   First seen in~\cite{SRGAN}.
-%   Mostly classical GAN architectures are used, might make sense to explore more recent variants for easier training (e.g.\ WGAN-GP).
-  
-% \end{description}
-% \subsection{Evaluation}\label{sec:evaluation}
-% \begin{description}
-% \item[PSNR] Peak-Signal-To-Noise-Ratio. Scaled version of \textsc{mse}, higher values correspond to lower error, defined by:
-%   \begin{equation}
-%   \label{eq:psnr}
-%   \mathrm{PSNR} = -10 \log_{10} (\mathrm{MSE}).
-% \end{equation}
-% \item[SSIM] Structural similarity index. Tries to measure perceived quality of images.
-% \end{description}
-
-% Either use metrics such as PSNR/SSIM, compare visually, or use efficiency as pre-processing, e.g. improved segmentation results
-
-% \subsection{Relevant results}
-% Difficult to compare, visual quality does not correspond directly to improved error!
-% For \textsc{psnr}-results see~\cref{tab:results}.
-
-% \begin{table}[]
-% \centering
-% \caption{Some Results, all measured in \textsc{psnr}}
-
-% \label{tab:results}
-% \begin{tabular}{@{}llll@{}}
-% \toprule
-% Model          & SET5  & SET14 & BSDS100 \\ \midrule
-% EDSR+~\cite{EDSR} & 32.62 & 28.94 & 27.97 \\
-% EnhanceNet-E~\cite{EnhanceNet}   & 31.74 & 28.42 & 27.50   \\
-% LAPSRN~\cite{LapSRN}         & 31.53 & 28.19 & 27.32   \\
-% DRCN~\cite{DRCN}           & 31.53 & 28.04 & 27.23   \\
-% ESPCN~\cite{Espcn}       & 30.9  & 27.73 &         \\
-% FSRCNN~\cite{Fsrcnn}         & 30.71 & 27.7  & 26.97   \\
-% EnhanceNet-PAT~\cite{EnhanceNet} & 28.56 & 25.77 & 24.93   \\
-% Bicubic        & 28.42 & 26.1  & 25.96   \\ \bottomrule
-% \end{tabular}
-% \end{table}
-
-% \section{Problem Statement}
-
-\section{Architecture}
-We use a modified \textbf{LapSRN} architecture inspired by~\cite{LapSRN}.
-The network utilises a Laplacian pyramid, it first performs 2x upscaling and then 4x upscaling.
-It can be seen in figure~\cref{fig:lapsrn}.
-
-\begin{figure}[htb]
+\section{Architectures}
+\begin{figure}[ht]
   \centering
   \begin{subfigure}[b]{0.49\textwidth}
   \includegraphics[width=1.0\textwidth]{{nn_lapsrn}}
@@ -229,9 +118,13 @@ It can be seen in figure~\cref{fig:lapsrn}.
     The symbol ($\bm{\ast}$) marks convolutions, ($\bm{\uparrow}$) resize-convolutions and 
     ($\bm{+}$) corresponds to element-wise addition
     All convolutions have 64 filters of size 3 with a padding and stride of 1.
+    All convolutions except the ones in the resize-convolutions in the image reconstruction branch are followed by a leaky rectified linear unit with a negative slope of $0.2$.
     \label{fig:networks}
   }
 \end{figure}
+We use a modified \textbf{LapSRN} architecture inspired by~\cite{LapSRN}.
+The network utilises a Laplacian pyramid, it first performs 2x upscaling and then 4x upscaling.
+It can be seen in figure~\cref{fig:lapsrn}.
 
 This architecture consists of two branches.
 The first branch is called \textbf{image reconstruction branch} and upscales the low resolution image using simple upscaling filters.
@@ -255,21 +148,19 @@ The modified architecture can be seen in~\cref{fig:lapdeblur}.
 
 We use the PatchGan~\cite{PatchGAN} discriminator for adversarial learning.
 This is a fully convolutional network that penalizes on a basis of $70\times70$ patches.
-In contrast to~\cite{PachGAN} we use instance normalization~\cite{InstanceNorm} instead of batch normalisation layers.
-\todo{Cite instance norm.}
+In contrast to~\cite{PatchGAN} we use instance normalization~\cite{InstanceNorm} instead of batch normalisation layers.
 Its architecture can be seen in \cref{fig:patchd}.
 
 \begin{figure}[htb]
   \centering
   \includegraphics[width=0.5\textwidth]{{nn_patchd}}
-  \caption{Discriminator architecture from~\cite{PatchGAN}.
-  $\vert \cdots \vert$ indicates instance normalization
-
-  $ \bm{\downarrow} $ and $ \bm{\ast} $ are convolutions with stride 2 and 1 respectively
-
-  All convolutions have kernel size 4 and a padding of 1.
+  \caption{
+Discriminator architecture from~\cite{PatchGAN}.
+$\vert \cdots \vert$ indicates instance normalization
+$ \bm{\downarrow} $ and $ \bm{\ast} $ are convolutions with stride 2 and 1 respectively
+All convolutions have kernel size 4 and a padding of 1 and are followed by a leaky rectified linear unit with a negative slope of $0.2$..
+\label{fig:patchd}
   }
-  \label{fig:patchd}
 \end{figure}
 
 \section{Loss functions}
@@ -278,20 +169,47 @@ In this work we combine three loss functions:
 A saliency weighted $L_1$-loss ensures the faithful reconstruction of important areas, a perceptual loss optimises visual similarity and an adversarial loss reconstructs high-frequency image components.
 This ensemble of loss functions is inspired by~\cite{SaliencyGAN} and is optimized for the reconstruction of retinal images.
 
+\begin{figure}[htb]
+\centering
+\begin{subfigure}{0.25\textwidth}
+\centering
+    \includegraphics[width=1\textwidth]{saliency_gt}
+    \caption{Input, Grayscale}
+\end{subfigure}~
+\begin{subfigure}{0.25\textwidth}
+\centering
+    \includegraphics[width=1\textwidth]{saliency_vessels}
+    \caption{$I_c$}
+\end{subfigure}~
+\begin{subfigure}{0.25\textwidth}
+\centering
+    \includegraphics[width=1\textwidth]{saliency_entropy}
+    \caption{$1 - I_e$}
+\end{subfigure}~
+\begin{subfigure}{0.25\textwidth}
+\centering
+    \includegraphics[width=1\textwidth]{saliency_full}
+    \caption{$I_{\text{sal}}$}
+\end{subfigure}
+
+\caption{Components of a saliency map}
+\label{fig:saliency}
+\end{figure}
+
 While the images in standard super-resolution tasks do not share a lot of common structure, retinal fundus images are visually similar to each other.
 This can be used to create hand-crafted saliency maps, that highlight relevant pixels.
 We use maps that are similar to the ones of~\cite{SaliencyGAN}.
 These saliency map consists of two components: the curvature and local entropy.
+The map and its components can be seen in \cref{fig:saliency}.
 
-The isophote curvature highlights fine structure in the image and can be computed as
+The curvature highlights fine structure in the image and can be computed as
 \begin{equation}
  I_c = \frac{\img_{xx} \img_y^2 + \img_{yy} \img_x^2 - 2 \img_{x} \img_{xy} \img_{y} }{(\img_x^2 + \img_y^2)^{1.5}},
 \end{equation}
 where \(\img\) is the intensity of the image and subscripts represents its derivatives~\cite{SaliencyGAN}.
 We approximate the image derivatives by convolving the image with derivatives of Gaussians with \(\sigma = 1\).
 Undefined areas of the feature map (e.g.\ by dividing by zero) are defined to have zero value.
-The resulting feature map is clipped to the range of $[0,1]$.\todo{phrasing!}
-A derivation and discussion of this curvature function can be found in~\cite{Curvature}.
+The resulting feature map is clipped to the range of $[0,1]$.
 
 The local entropy highlights pixels that are in a neighborhood that contain more information.
 We compute the entropy for each pixel by
@@ -364,18 +282,16 @@ Thus, the probability distributions $P_r$ and $P_g$ correspond to the distributi
 This discriminator design is able to discover high-frequency image details while relying on the other two losses for low-frequency content~\cite{PatchGAN}.
 Note that we only penalize the last output image by the adversarial loss.
 
-%The first implementation that used an adversarial loss for single-image super-resolution was~\cite{SRGAN} which resulted in visually pleasing images.
 The total loss function is then
 \begin{equation}
   \label{eq:total-loss}
 L_\text{total}(\hat{\img}, \img) = \frac{1}{3 W_{\img} H_{\img}}
 \left( \sum_{\img, \hat{\img}}
-  5 L_{\text{sal}} (\img, \hat{\img}) + 0.12  L_p(\img, \hat{\img}) \right) + \lambda L_a,
+  5 L_{\text{sal}} (\img, \hat{\img}) + 0.12  L_p(\hat{\img}, \img) \right) + 0.01 L_a,
 \end{equation}
 where the sum runs over all model outputs \(\hat{\img}\) and the corresponding ground truth \(\img\).
 All losses are normalised by number of channels (3), image height \(H_{\img}\) and width \(W_{\img}\).
-The weights for saliency and perceptual loss are chosen such that they are of similar size.
-We empirically chose an adversarial weight $\lambda$ of 0.01 and 0.1 for super-resolution and deblurring respectively.
+The weights for saliency and perceptual loss are chosen such that they are of similar size, the adversarial weight was chosen empirically.
 
 \section{Implementation \textit{\&} Training}
 We use the Messidor dataset~\cite{Messidor} which consists of 1200 high resolution fundus images.
@@ -427,20 +343,19 @@ This is the normalisation that is expected from the pre-trained VGG-16 network.
 We use a batch size of $64$ for all experiments.
 An epoch thus consists of $15$ gradient updates.
 
-All weights of the generator are initialised with Xavier initialisation~\cite{Xavier}, all weights of the discriminator are drawn from a normal distribution with mean zero and variance of 0.02. 
+All weights of the generator are initialised with Xavier initialisation~\cite{Xavier}, all weights of the discriminator are drawn from a normal distribution with mean zero and variance of 0.02~\cite{PatchGAN}. 
 We first train solely the generator without adversarial loss.
 It is optimized by \textsc{adam}~\cite{Adam} with an initial learning rate of $1r-3$ for the super-resolution network and $1e-4$ for the deblurring network.
 We use a weight decay of $1e-4$.
 The super-resolution generator is trained for $9999$ epochs, the deblurring generator for $6666$ epochs.
-The the learning rate is divided by ten every $3333$ epochs.
+The learning rate is divided by ten every $3333$ epochs.
 
 The resulting network is then used to initialise the adversarial training, which continues for another $6666$ epochs.
 This training uses the same learning rate for both networks, starting with an initial rate of $\SI{1e-5}{}$, again decayed by $10$ every $3333$ epochs.
-We use \textsc{adam} with the momentum term $\beta_1$ set to $0.5$ for improved stability.
+We use \textsc{adam} with the momentum term $\beta_1$ set to $0.5$ for improved stability~\cite{Dcgan}.
 No weight decay is used in this stage.
 
-We validate after every $10$ epochs.
-The network is implemented in Pytorch~\cite{Pytorch} and was trained using a Titan X.
+The network is implemented was Pytorch~\cite{Pytorch} and was trained using a Titan X.
 Training takes \SI{20}{\hour} for the super-resolution network without adversarial loss and an additional 1d5h for the adversarial training.
 The deblurring network took 1d10h without adversarial loss and an additional 1d20h for adversarial training.
 
@@ -496,9 +411,10 @@ Full & 4 & 41.78 & 0.942 & 2.64 \\
 \end{tabular}
 \end{table}
 
-To evaluate the effectiveness of our chosen loss function, we trained different combinations with the same training schedule (e.g.\ learning rate, augmentations).
+To evaluate the effectiveness of our chosen loss function, we trained different combinations with the same training schedule.
 We first evaluated on the Messidor dataset, these results can be seen in \cref{tab:results-sr-messidor}
-The results for the Drive dataset~\cite{Drive} can be seen in~\cref{tab:results-sr}, example images in figure~\todo{example imgs!}.
+An example image patch for this dataset can be found in \cref{fig:messidor-example}
+The results for the Drive dataset~\cite{Drive} can be seen in~\cref{tab:results-sr-drive}, an example for a resulting segmentation in \cref{fig:segmentation-example}.
 \begin{description}
 \item[Saliency] The saliency weighted $L_1$-loss leads to an accurate, albeit blurry, reconstruction of important features of the fundus.
   It results in the highest \textsc{psnr} and \textsc{ssim}.
@@ -512,16 +428,14 @@ The results for the Drive dataset~\cite{Drive} can be seen in~\cref{tab:results-
 \item[Saliency \textit{\&} Perceptual \textit{\&} Adversarial]
   The addition of the adversarial loss improves the reconstruction of texture, the images are sharper.
   Additionally, it removes the artifacts introduced by the perceptual loss.
-  It leads to the best \textsc{auc} for the unet segmentation.
+  It leads to the best \textsc{auc} for the \textbf{UNet} segmentation.
   The downside of this loss is the loss of uncertainty:
   Instead of predicting the average image it guesses some details.
   This can lead to additional failure cases where the network hallucinates details.
-  An example for this can be seen in figure xxx.
 \end{description}
 Overall, our loss ensemble results in both correct reconstruction and visually pleasing results.
 The adversarial loss trades some correctness for sharper images.
-With and without it, the loss ensemble achieves competitive results.
-The best choice thus depends on the application.
+With and without it, the loss ensemble achieves competitive results on both datasets with both upscaling factors.
 
 \begin{table}[htb]
 \centering
@@ -534,7 +448,7 @@ The best choice thus depends on the application.
 \begin{tabular}{@{}lS[table-format=2.2]S[table-format=2.2]S[table-format=2.2]S[table-format=2.3]S[table-format=2.3]@{}}
 \toprule
 {Model} & {PSNR} & {SSIM} & {Sobel \textsc{mse} \SI{1e4}{}} & {Frangi Reconstruction Acc.} & {AUC UNet} \\ \midrule
-Ground Truth & $\infty$ & 1.0 & 0.0 & 1.0 & 0.979 \\
+Ground Truth & $\infty$ & 1.00 & 0.00 & 1.00 & 0.979 \\
 Bicubic & 35.27 & 0.92 & 29.87 & 97.05 & 0.852 \\
 Perceptual & 38.90 & 0.93 & 8.61 & \bftabnum 98.62 & 0.943 \\
 Saliency & \bftabnum 39.50 & \bftabnum 0.94 & 8.55 & 98.35 & 0.921 \\
@@ -544,18 +458,94 @@ Full & 38.85 & 0.93 & 8.29 & 98.51 & \bftabnum 0.948 \\
 \end{tabular}
 \end{table}
 
-The deblurring network is compared to a standard \textit{UNet} architecture~\cite{Unet} with \textsc{mse} loss, trained in the same manner as our network.
-In the implementation that we are using\todo{Link to github?}, the feature maps for the skip connections are not cropped but rather padded such that they have the same shape.
+\begin{figure}[htb]
+\centering
+\makebox[\linewidth][c]{%
+\begin{subfigure}{0.2\textwidth}
+\centering
+    \includegraphics[width=1.0\textwidth]{segmentation_hr}
+    \caption{HR}
+\end{subfigure}~
+\begin{subfigure}{0.2\textwidth}
+\centering
+    \includegraphics[width=1.0\textwidth]{segmentation_bic}
+    \caption{Bicubic}
+\end{subfigure}~
+\begin{subfigure}{0.2\textwidth}
+\centering
+    \includegraphics[width=1.0\textwidth]{segmentation_perc}
+    \caption{Perceptual}
+\end{subfigure}~
+\begin{subfigure}{0.2\textwidth}
+\centering
+    \includegraphics[width=1.0\textwidth]{segmentation_saly}
+    \caption{Saliency}
+\end{subfigure}~
+\begin{subfigure}{0.2\textwidth}
+\centering
+    \includegraphics[width=1.0\textwidth]{segmentation_nogan}
+    \caption{Sal.\ + Perc.}
+\end{subfigure}~
+\begin{subfigure}{0.2\textwidth}
+\centering
+    \includegraphics[width=1.0\textwidth]{segmentation_gan}
+    \caption{Full Model}
+\end{subfigure}
+}
+\caption{Segmentation results for different loss functions.}
+\label{fig:segmentation-example}
+\end{figure}
+
+\begin{figure}[htb]
+\centering
+\makebox[\linewidth][c]{%
+\begin{subfigure}{0.2\textwidth}
+\centering
+    \includegraphics[width=1.0\textwidth]{patch_sr1_gt}
+    \caption{HR}
+\end{subfigure}~
+\begin{subfigure}{0.2\textwidth}
+\centering
+    \includegraphics[width=1.0\textwidth]{patch_sr1_bic}
+    \caption{Bicubic}
+\end{subfigure}~
+\begin{subfigure}{0.2\textwidth}
+\centering
+    \includegraphics[width=1.0\textwidth]{patch_sr1_perc}
+    \caption{Perceptual}
+\end{subfigure}~
+\begin{subfigure}{0.2\textwidth}
+\centering
+    \includegraphics[width=1.0\textwidth]{patch_sr1_sal}
+    \caption{Saliency}
+\end{subfigure}~
+\begin{subfigure}{0.2\textwidth}
+\centering
+    \includegraphics[width=1.0\textwidth]{patch_sr1_sal_perc}
+    \caption{Sal.\ + Perc.}
+\end{subfigure}~
+\begin{subfigure}{0.2\textwidth}
+\centering
+    \includegraphics[width=1.0\textwidth]{patch_sr1_gan}
+    \caption{Full Model}
+\end{subfigure}
+}
+\caption{Upscaling results for different loss functions.}
+\label{fig:messidor-example}
+\end{figure}
+
+The deblurring network is compared to a standard \textbf{UNet} architecture~\cite{Unet} with \textsc{mse} loss, trained in the same manner as our network.
+We use an implementation that does not crop feature maps for the skip connections but rather pads them such that they have the same shape.
 This is a common architecure for bio-medical applications and similar architectures are used successfully as generators for image-translation tasks~\cite{PatchGAN}.
-\todo{Evaluate deblurring}
+Results for the deblurring task can be seen in \cref{fig:deblurring-metrics} and an example in \cref{fig:deblurring-example}.
+Our network is able to improve the perceived image quality, \textsc{ssim} and segmentation \textsc{auc}.
+Note that the \textbf{UNet} achieves a better \textsc{ssim}-value but worse \textsc{auc}.
 
-A preliminary evaluation on intraoperative date did not show any significant improvemt for both deblurring and super-resolution.
-A possible reason for this could be that the training data differs too much from the testing data in this case.
-This could be rectified by training with more realistic data.
-\todo{Intraoperative}
-$\cdots$
+A benchmark for our networks can be seen in \cref{fig:benchmark}.
+Even though we did not do any performance optimization, super-resolving small image patches (of size $128^2$) and deblurring patches of size $256^2$ is possible in real-time.
 
-\todo{Add example images and failure case}
+A preliminary evaluation on intraoperative date did not show any significant improvement for both deblurring and super-resolution.
+A possible reason for this could be that the training data differs too much from the testing data in this case and that the video quality was too poor.
 
 \begin{figure}[htb]
 \centering
@@ -563,8 +553,31 @@ $\cdots$
 \caption{Measurements on Drive(Test).
   Blur radius vs.\ metric.\\
 Segmentation on blurred images directly leads to an AUC of 0.96, 0.83 and 0.65 respectively.}
-\label{fig:benchmark}
+\label{fig:deblurring-metrics}
 \end{figure}
+
+\begin{figure}[htb]
+\centering
+\begin{subfigure}{0.33\textwidth}
+\centering
+    \includegraphics[width=1.0\textwidth]{deblur_gt}
+    \caption{GT}
+\end{subfigure}%
+\begin{subfigure}{0.33\textwidth}
+\centering
+    \includegraphics[width=1.0\textwidth]{deblur_lr}
+    \caption{Blurred, Radius 3}
+\end{subfigure}%
+\begin{subfigure}{0.33\textwidth}
+\centering
+    \includegraphics[width=1.0\textwidth]{deblur_gan}
+    \caption{Deblurred with full model}
+\end{subfigure}
+
+\caption{Example deblurring. Image from Drive (test)~\cite{Drive}}
+\label{fig:deblurring-example}
+\end{figure}
+
 
 \begin{figure}[htb]
 \centering
@@ -582,10 +595,8 @@ Segmentation on blurred images directly leads to an AUC of 0.96, 0.83 and 0.65 r
 Measured on a Titan X.}
 \label{fig:benchmark}
 \end{figure}
-\todo{Change fps to ms?}
 
 \section{Summary}
-\todo{write summary}
 % \begin{enumerate}
 % \item We compare different loss functions and their suitability for medical image denoising.
 % \item We present models that are able to reconstruct images detoriated by both mentioned downsampling operators in real-time.
@@ -616,5 +627,6 @@ The algorithms satisfy all our constraints for intraoperative usage:
   The chosen loss combination is able to restore gradient-information of the image with high detail.
 \end{itemize}
 
+\FloatBarrier
 \printbibliography
 \end{document}
