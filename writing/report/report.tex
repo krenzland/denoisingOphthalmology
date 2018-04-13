@@ -51,30 +51,22 @@
 \maketitle
 
 \section{Introduction}
-Intraoperative medical imaging is an important part of modern surgery.
-This project is focussed mostly on the example of retinal membrane peeling, which is an ophthalmic operation.
-While high quality images are available in the diagnostic phase, this is not true during operations.
-
+Intraoperative medical imaging is an important part of modern urgery.
 During ophthalmic procedures, the surgeon manipulates anatomical structures of the retina with micron-scale maneuvers while observing the scene indirectly via microscope.
 The resulting magnification has the effect that only a small area is focussed, other parts are either distorted or occluded.
 Additionally, the motion of the eye introduces blur.
 All these factors result in images which are corrupted by noise.
 This makes precise operations more difficult.
-The intraoperative images not only differ from the diagnostic ones in terms of quality.
+Intraoperative images not only differ from the diagnostic ones in terms of quality.
 During surgery, instruments are present and the membrane is stained with a coloring agent to amplify its edges.
 
 Our goal is to increase the resolution of retinal fundus images both for diagnostic and intraoperative images.
-Assuming that we have a measured image \(\hat{\img}\) that is downsampled by an unknown operator \(\operatorname{\downarrow}\),
-\begin{equation}
-  \label{eq:model}
-  \hat{\img} = \operatorname{\downarrow}(\img),
-\end{equation}
-the goal is to find the best reconstruction of the original image \(\img\).
-We consider two different models for \(\operatorname{\downarrow}\):
+Assuming that we have an image that was downsampled by an unknown operator, the goal is to find the best reconstruction of the original image.
+We consider two different models:
 \begin{itemize}
 \item Downsampling by decresead spatial resolution.
-  In our case we want to reconstruct an image that was downscaled by a factor of $4$.
-  In the literature, this problem is called single image super resolution.
+  In our case we want to reconstruct an image that was downscaled by a factor of $2$ or $4$.
+  This problem is called single image super resolution.
 \item Downsampling by decreased sharpness.
   For this case we try to increase the quality of images by removing blur.
 \end{itemize}
@@ -89,17 +81,12 @@ This implies that we have to preserve the image edges.
 \end{enumerate}
 These constraints can be fulfilled by a deep learning approach.
 
-During the last few years a vast amount of different neural network topologies has been published.
-Most of them work on a larger amount of data than we have available and are complex models that do not work in real-time.
-The goal of this guided research is to compare different approaches for the denoising and upscaling of the aforementioned pictures.
-The main challenge of this project is finding a good trade-off between the resulting image quality and the usability during surgery.
-
 We make the following contributions:
-\begin{enumerate}
-\item We compare different loss functions and their suitability for medical image denoising.
-\item We present models that are able to reconstruct images detoriated by both mentioned downsampling operators in in real-time for small crop sizes.
-\item We evaluate the resulting algorithms with metrics and discuss the consequences for practical applications.
-\end{enumerate}
+\begin{itemize}
+\item We compare different loss functions, including adversarial training, and their suitability for the restoration of fundus images.
+\item We present deep-learning models that are able to reconstruct images detoriated by both mentioned downsampling operators in in real-time for small crop sizes.
+\item We evaluate the resulting algorithms with multiple metrics and discuss the consequences for intraoperative applications.
+\end{itemize}
 
 \section{Architectures}
 \begin{figure}[ht]
@@ -122,31 +109,29 @@ We make the following contributions:
     \label{fig:networks}
   }
 \end{figure}
-We use a modified \textbf{LapSRN} architecture inspired by~\cite{LapSRN}.
+We use a modified \textbf{LapSRN} architecture (\cref{fig:lapsrn})~\cite{LapSRN}.
 The network utilises a Laplacian pyramid, it first performs 2x upscaling and then 4x upscaling.
-It can be seen in figure~\cref{fig:lapsrn}.
 
 This architecture consists of two branches.
-The first branch is called \textbf{image reconstruction branch} and upscales the low resolution image using simple upscaling filters.
-The second branch extracts features from the low resolution image using stacked convolutions and predicts the \textbf{residual} for each upscaled image of the first branch.
-We use a depth of 10 per output resolution for feature extration.
+The first is the \textit{image reconstruction branch} and upscales the low resolution image using simple upscaling filters.
+The second branch extracts features from the low resolution image using stacked convolutions and predicts the residual for each upscaled image of the first branch.
+We use a depth of 10 per output resolution for this \textit{feature extration branch}.
 
-Our model differs in two ways from the original architecture:
+Our model differs in three ways from the original architecture:
 \begin{itemize}
 \item We use three-channel \textsc{rgb} images both as input and output instead of working only on the Y-channel.
 \item Instead of transposed convolutions we use resize-convolution blocks.
-  They are composed of a nearest neighbour interpolation, a reflect-pad of size one and a standard convolution filter.
-  Empirical evidence suggest that they lead to fewer checkerboard artefacts than transposed convolution, especially when they are used in a \textsc{gan} framework\cite{deconvolution}.
+  They are composed of a nearest neighbour interpolation, a reflect-pad of size one and a standard convolution.
+  They lead to fewer checkerboard artefacts than transposed convolutions, especially when they are used with adversarial learning~\cite{deconvolution}.
 \item We only consider 4x upscaling here, but the approach can be easily extended to larger upscaling ratios.
 \end{itemize}
 
-For the deblurring case, the upsampling block is removed from the feature extraction pipeline.
-Additionally, the image reconstruction stage is replaced by the blurred high-resolution images.
-This means that we can use a similar architecture for both downscaling operators.
+For the deblurring case, we modify the architecture (\cref{fig:lapdeblur}) by removing the upsampling blocks from the \textit{feature extraction branch}.
+Additionally, instead of using a \textit{image reconstruction branch}, we compute the residuals for input images directly.
 Because all convolutions now operate in high-resolution space, we use 5 convolutions per output.
-The modified architecture can be seen in~\cref{fig:lapdeblur}.
+This approach has the advantage that we can use similar models for both downsampling operators.
 
-We use the PatchGan~\cite{PatchGAN} discriminator for adversarial learning.
+We use the \textbf{PatchGan}~\cite{PatchGAN} discriminator for adversarial learning.
 This is a fully convolutional network that penalizes on a basis of $70\times70$ patches.
 In contrast to~\cite{PatchGAN} we use instance normalization~\cite{InstanceNorm} instead of batch normalisation layers.
 Its architecture can be seen in \cref{fig:patchd}.
@@ -156,9 +141,10 @@ Its architecture can be seen in \cref{fig:patchd}.
   \includegraphics[width=0.5\textwidth]{{nn_patchd}}
   \caption{
 Discriminator architecture from~\cite{PatchGAN}.
-$\vert \cdots \vert$ indicates instance normalization
-$ \bm{\downarrow} $ and $ \bm{\ast} $ are convolutions with stride 2 and 1 respectively
-All convolutions have kernel size 4 and a padding of 1 and are followed by a leaky rectified linear unit with a negative slope of $0.2$..
+The symbol ($\vert \cdots \vert$) indicates instance normalization,
+($ \bm{\downarrow} $) and ($ \bm{\ast} $) are convolutions with stride 2 and 1 respectively
+All convolutions have kernel size 4 and a padding of 1 and are followed by a leaky rectified linear unit with a negative slope of $0.2$.
+The layers have an output size of 64, 128, 256, 512 and 1.
 \label{fig:patchd}
   }
 \end{figure}
@@ -166,7 +152,7 @@ All convolutions have kernel size 4 and a padding of 1 and are followed by a lea
 \section{Loss functions}
 An appropiate choice of loss function is important to achieve good reconstructions.
 In this work we combine three loss functions:
-A saliency weighted $L_1$-loss ensures the faithful reconstruction of important areas, a perceptual loss optimises visual similarity and an adversarial loss reconstructs high-frequency image components.
+A saliency weighted $L_1$-loss ensures the faithful reconstruction of important areas, a perceptual loss optimizes visual similarity and an adversarial loss reconstructs high-frequency image components.
 This ensemble of loss functions is inspired by~\cite{SaliencyGAN} and is optimized for the reconstruction of retinal images.
 
 \begin{figure}[htb]
@@ -192,26 +178,27 @@ This ensemble of loss functions is inspired by~\cite{SaliencyGAN} and is optimiz
     \caption{$I_{\text{sal}}$}
 \end{subfigure}
 
-\caption{Components of a saliency map}
+\caption{Components of a saliency map.
+Brighter pixels indicate a higher weight.}
 \label{fig:saliency}
 \end{figure}
 
 While the images in standard super-resolution tasks do not share a lot of common structure, retinal fundus images are visually similar to each other.
-This can be used to create hand-crafted saliency maps, that highlight relevant pixels.
+This can be used to create hand-crafted saliency maps that highlight relevant pixels.
 We use maps that are similar to the ones of~\cite{SaliencyGAN}.
-These saliency map consists of two components: the curvature and local entropy.
-The map and its components can be seen in \cref{fig:saliency}.
+These saliency map consists of two components: curvature and local entropy.
+The map and its components are shown in \cref{fig:saliency}.
 
-The curvature highlights fine structure in the image and can be computed as
+The curvature map highlights fine structure in the image and can be computed as
 \begin{equation}
  I_c = \frac{\img_{xx} \img_y^2 + \img_{yy} \img_x^2 - 2 \img_{x} \img_{xy} \img_{y} }{(\img_x^2 + \img_y^2)^{1.5}},
 \end{equation}
 where \(\img\) is the intensity of the image and subscripts represents its derivatives~\cite{SaliencyGAN}.
 We approximate the image derivatives by convolving the image with derivatives of Gaussians with \(\sigma = 1\).
-Undefined areas of the feature map (e.g.\ by dividing by zero) are defined to have zero value.
-The resulting feature map is clipped to the range of $[0,1]$.
+Undefined elements of the feature map are defined to have a weight of zero.
+We clip the resulting feature map to the range of $[0,1]$.
 
-The local entropy highlights pixels that are in a neighborhood that contain more information.
+The local entropy map highlights pixels that are in a neighborhood that contain more information.
 We compute the entropy for each pixel by
 \begin{equation}
   \label{eq:entr}
@@ -287,13 +274,13 @@ The total loss function is then
   \label{eq:total-loss}
 L_\text{total}(\hat{\img}, \img) = \frac{1}{3 W_{\img} H_{\img}}
 \left( \sum_{\img, \hat{\img}}
-  5 L_{\text{sal}} (\img, \hat{\img}) + 0.12  L_p(\hat{\img}, \img) \right) + 0.01 L_a,
+  5 L_{\text{sal}} (\hat{\img}, \img) + 0.12  L_p(\hat{\img}, \img) \right) + 0.01 L_a,
 \end{equation}
 where the sum runs over all model outputs \(\hat{\img}\) and the corresponding ground truth \(\img\).
 All losses are normalised by number of channels (3), image height \(H_{\img}\) and width \(W_{\img}\).
 The weights for saliency and perceptual loss are chosen such that they are of similar size, the adversarial weight was chosen empirically.
 
-\section{Implementation \textit{\&} Training}
+\section{Implementation \textit{\&} Training Details}
 We use the Messidor dataset~\cite{Messidor} which consists of 1200 high resolution fundus images.
 The black borders from the images were removed.
 We used 80\% of the dataset for training, the rest was used for validation.
@@ -313,19 +300,16 @@ This threshold was chosen empirically.
 This is simulated by increasing the intensity of the image in a circular mask (post-processed with a Gaussian filter) by a random intensity.
 The specular reflection mirror the usage of light sources during operations.
 \end{itemize}
-Note that all augmentations (except the specular reflections) are also applied to the pre-computed saliency-maps and the random scaling is applied on the vessel segmentations.
+Note that all augmentations (except specular reflections) are also applied to the pre-computed saliency-maps and the random scaling is applied on the vessel segmentations.
 The scaling, rotation and flipping augmentations are also used by~\cite{LapSRN}.
 
-We obtain low resolution images are using
-\begin{description}
-\item[Super-resolution] Gaussian blur (with a maximum radius of two) followed by bicubic downsampling or
-\item[Denoising] Gaussian blur (with a maximum radius of three).
-\end{description}
+We obtain low resolution images by a Gaussian blur with maximum radius of three for denoising
+For the super-resolution network, we first apply a gaussian blur with a maximum radius of two and then use bicubic downsampling with factors 2 and 4.
 The blurring is done by first selecting a random total blur radius, sampled uniformally between zero and the maximum blur.
 We then distribute the blur such that the intermediate image is blurred with half strength.
 This intermediate blur can be computed by \( \left( \text{radius}_{\text{total}} / \sqrt{2} \right)\), using the fact that a convolution of two Gaussians is a Gaussian.
 
-Finally, images and saliency maps are converted to tensors of range 0 to 1.
+Finally, images and saliency maps are converted to tensors of range $(0,1)$.
 Images are scaled by subtracting
 \(
 \begin{bmatrix}
@@ -345,19 +329,19 @@ An epoch thus consists of $15$ gradient updates.
 
 All weights of the generator are initialised with Xavier initialisation~\cite{Xavier}, all weights of the discriminator are drawn from a normal distribution with mean zero and variance of 0.02~\cite{PatchGAN}. 
 We first train solely the generator without adversarial loss.
-It is optimized by \textsc{adam}~\cite{Adam} with an initial learning rate of $1r-3$ for the super-resolution network and $1e-4$ for the deblurring network.
-We use a weight decay of $1e-4$.
+It is optimized by \textsc{adam}~\cite{Adam} with an initial learning rate of $10^{-4}$ for the super-resolution network and $10^{-5}$ for the deblurring network.
+We use a weight decay of $10^{-5}$.
 The super-resolution generator is trained for $9999$ epochs, the deblurring generator for $6666$ epochs.
 The learning rate is divided by ten every $3333$ epochs.
 
-The resulting network is then used to initialise the adversarial training, which continues for another $6666$ epochs.
-This training uses the same learning rate for both networks, starting with an initial rate of $\SI{1e-5}{}$, again decayed by $10$ every $3333$ epochs.
-We use \textsc{adam} with the momentum term $\beta_1$ set to $0.5$ for improved stability~\cite{Dcgan}.
+The resulting network is then used to initialise the adversarial training, which is trained for another $6666$ epochs.
+We use the same learning rate for both networks, starting with an initial value of $10^{-5}$, using the same learning rate schedule as for the initial training.
+Both networks are optimised by \textsc{adam} with the momentum term $\beta_1$ set to $0.5$ for improved stability~\cite{Dcgan}.
 No weight decay is used in this stage.
 
 The network is implemented was Pytorch~\cite{Pytorch} and was trained using a Titan X.
-Training takes \SI{20}{\hour} for the super-resolution network without adversarial loss and an additional 1d5h for the adversarial training.
-The deblurring network took 1d10h without adversarial loss and an additional 1d20h for adversarial training.
+Training takes \SI{20}{\hour} for the super-resolution network without adversarial loss and an additional \SI{29}{\hour} for the adversarial training.
+The deblurring network took \SI{34}{\hour} for the initial training and an additional \SI{48}{\hour} for adversarial training.
 
 \section{Evaluation}
 We use the \textsc{mse}-based metric \textsc{psnr} to compare images on a pixel-wise basis.
@@ -376,19 +360,17 @@ For this we use two methods:
   The method is not robust, sometimes a blurry images leads to a more accurate reconstruction.
   This is why compare the reconstruction of the Frangi segmentation instead of the segmentation accuracy.
 \item As an example for a state-of-the art deep-learning based algorithm we use~\cite{RetinaUnet}.
-  It is based on the UNet-architecture~\cite{Unet}.
+  It is based on the \textbf{UNet}-architecture~\cite{Unet}.
   For this method we report the area under the \textsc{ROC}-curve (\textsc{AUC}).
 \end{enumerate}
 We evaluate this on the testing set of the DRIVE dataset~\cite{Drive}, for which a ground truth segmentation is available.
 We compare the super resolution network with bicubic interpolation.
 Images are first reflect padded to have a size divisable by 4 for SR and 16 for deblurring.
-This padding is then removed.
-For alle measurements except unet-segmentation, this padding is removed before comparison.
+This padding is then removed before all comparisons.
 We cut off an additional stripe of size equal to the upsampling factor for the super-resolution network.
-
 \begin{table}[htb]
 \centering
-\caption{Results for super resolution models on the Messidor dataset for both possible upsizing factors.
+\caption{Results for super resolution models on our validation dataset (Messidor~\cite{Messidor}) for both possible upsizing factors.
   The full model is not compared for the $2\times$ model because the adversarial loss is only applied to the largest output image.
   Best results are bold.
 }
@@ -409,38 +391,40 @@ Saliency + Perceptual & 4 & 42.23 & 0.945 & \bftabnum 2.51 \\
 Full & 4 & 41.78 & 0.942 & 2.64 \\
 \bottomrule
 \end{tabular}
-\end{table}
-
+\end{table}%
 To evaluate the effectiveness of our chosen loss function, we trained different combinations with the same training schedule.
-We first evaluated on the Messidor dataset, these results can be seen in \cref{tab:results-sr-messidor}
-An example image patch for this dataset can be found in \cref{fig:messidor-example}
-The results for the Drive dataset~\cite{Drive} can be seen in~\cref{tab:results-sr-drive}, an example for a resulting segmentation in \cref{fig:segmentation-example}.
+We first evaluated on our hold-out validation dataset (\cref{tab:results-sr-messidor}).
+For an example image patch for this dataset, see \cref{fig:messidor-example}.
+Secondly, we evaluated on the Drive~\cite{Drive} dataset (\cref{tab:results-sr-drive}). 
+An example segmentation for all loss function is shown in \cref{fig:segmentation-example}.
 \begin{description}
 \item[Saliency] The saliency weighted $L_1$-loss leads to an accurate, albeit blurry, reconstruction of important features of the fundus.
   It results in the highest \textsc{psnr} and \textsc{ssim}.
   Some textural details are missing and edges of vessels are not clear.
+  It has the worst segmentation results, tiny details are lost for this reconstruction.
 \item[Perceptual] The perceptual loss results in lower \textsc{psnr} and \textsc{psnr} but the images are more realistic and visually more pleasing.
   It introduces regular artifacts and leads to the best reconstruction of the Frangi segmentation.
+  This loss achieves a \textbf{UNet} segmentation result that is nearly as good as the loss ensemble, indicating that it is the most important component.
 \item[Saliency \textit{\&} Perceptual] Combining both losses results in a reconstruction that is a good compromise between faithful pixel-wise reconstruction and perceptual quality.
   The artefacts are still visible but with a smaller intensity.
-  It has the lowest Sobel-\textsc{mse} which indicates that it is able to restore image gradients.
-  Additionally, it restores the Frangi segmentation as correctly as the perceptual loss alone.
+  It has the lowest Sobel-\textsc{mse} which indicates that it is able to restore image gradients more correctly.
+  Additionally, it restores the Frangi segmentation as correctly as the perceptual loss alone and has the second best \textbf{UNet} segmentation.
 \item[Saliency \textit{\&} Perceptual \textit{\&} Adversarial]
   The addition of the adversarial loss improves the reconstruction of texture, the images are sharper.
-  Additionally, it removes the artifacts introduced by the perceptual loss.
+  Additionally, it removes the artefacts introduced by the perceptual loss.
   It leads to the best \textsc{auc} for the \textbf{UNet} segmentation.
-  The downside of this loss is the loss of uncertainty:
-  Instead of predicting the average image it guesses some details.
-  This can lead to additional failure cases where the network hallucinates details.
+  The downside of this loss is that it the adversarial component is not trained to reconstruct the image correctly.
+  This can lead to additional failure cases where the network hallucinates details, such as additional blood vessels.
 \end{description}
-Overall, our loss ensemble results in both correct reconstruction and visually pleasing results.
-The adversarial loss trades some correctness for sharper images.
-With and without it, the loss ensemble achieves competitive results on both datasets with both upscaling factors.
+Overall, our loss ensemble results in both correct reconstruction and visually convincing results.
+This is true as well for the $2 \times$ scaled output.
+The adversarial loss trades faithful reconstruction for sharper images.
+With and without it, our proposed loss combination achieves competitive results on both datasets.
 
-\begin{table}[htb]
+\begin{table}[t]
 \centering
-\caption{Results for super resolution models on Drive (Test) dataset.
-  AUC corresponds to area under the receiver-operator curve achieved by running the retina-unet on the upscaled images.
+\caption{Results for super resolution models on the Drive~\cite{Drive} (testing) dataset.
+  AUC corresponds to area under the \textsc{roc} curve achieved by running the retina-unet~\cite{RetinaUnet} on the upscaled images.
   Best results are bold.
 }
 
@@ -458,7 +442,7 @@ Full & 38.85 & 0.93 & 8.29 & 98.51 & \bftabnum 0.948 \\
 \end{tabular}
 \end{table}
 
-\begin{figure}[htb]
+\begin{figure}[t]
 \centering
 \makebox[\linewidth][c]{%
 \begin{subfigure}{0.2\textwidth}
@@ -492,7 +476,7 @@ Full & 38.85 & 0.93 & 8.29 & 98.51 & \bftabnum 0.948 \\
     \caption{Full Model}
 \end{subfigure}
 }
-\caption{Segmentation results for different loss functions.}
+\caption{Segmentation results on Drive~\cite{Drive} testing set.}
 \label{fig:segmentation-example}
 \end{figure}
 
@@ -501,57 +485,54 @@ Full & 38.85 & 0.93 & 8.29 & 98.51 & \bftabnum 0.948 \\
 \makebox[\linewidth][c]{%
 \begin{subfigure}{0.2\textwidth}
 \centering
-    \includegraphics[width=1.0\textwidth]{patch_sr1_gt}
+    \includegraphics[width=1.0\textwidth]{patch_sr1_gt_small}
     \caption{HR}
 \end{subfigure}~
 \begin{subfigure}{0.2\textwidth}
 \centering
-    \includegraphics[width=1.0\textwidth]{patch_sr1_bic}
+    \includegraphics[width=1.0\textwidth]{patch_sr1_bic_small}
     \caption{Bicubic}
 \end{subfigure}~
 \begin{subfigure}{0.2\textwidth}
 \centering
-    \includegraphics[width=1.0\textwidth]{patch_sr1_perc}
+    \includegraphics[width=1.0\textwidth]{patch_sr1_sal_perc_small}
     \caption{Perceptual}
 \end{subfigure}~
 \begin{subfigure}{0.2\textwidth}
 \centering
-    \includegraphics[width=1.0\textwidth]{patch_sr1_sal}
+    \includegraphics[width=1.0\textwidth]{patch_sr1_sal_small}
     \caption{Saliency}
 \end{subfigure}~
 \begin{subfigure}{0.2\textwidth}
 \centering
-    \includegraphics[width=1.0\textwidth]{patch_sr1_sal_perc}
+    \includegraphics[width=1.0\textwidth]{patch_sr1_sal_perc_small}
     \caption{Sal.\ + Perc.}
 \end{subfigure}~
 \begin{subfigure}{0.2\textwidth}
 \centering
-    \includegraphics[width=1.0\textwidth]{patch_sr1_gan}
+    \includegraphics[width=1.0\textwidth]{patch_sr1_gan_small}
     \caption{Full Model}
 \end{subfigure}
 }
-\caption{Upscaling results for different loss functions.}
+\caption{Upscaling results for an $128^2$ patch from our validation set (Messidor~\cite{Messidor})}
 \label{fig:messidor-example}
 \end{figure}
 
 The deblurring network is compared to a standard \textbf{UNet} architecture~\cite{Unet} with \textsc{mse} loss, trained in the same manner as our network.
 We use an implementation that does not crop feature maps for the skip connections but rather pads them such that they have the same shape.
-This is a common architecure for bio-medical applications and similar architectures are used successfully as generators for image-translation tasks~\cite{PatchGAN}.
-Results for the deblurring task can be seen in \cref{fig:deblurring-metrics} and an example in \cref{fig:deblurring-example}.
-Our network is able to improve the perceived image quality, \textsc{ssim} and segmentation \textsc{auc}.
+This is a common architecure for bio-medical applications and similar architectures can be used successfully as generators for image-translation tasks~\cite{PatchGAN}.
+Our network is able to improve the perceived image quality (\cref{fig:deblurring-example}), \textsc{ssim} and segmentation \textsc{auc} (see \cref{fig:deblurring-metrics}).
 Note that the \textbf{UNet} achieves a better \textsc{ssim}-value but worse \textsc{auc}.
 
-A benchmark for our networks can be seen in \cref{fig:benchmark}.
-Even though we did not do any performance optimization, super-resolving small image patches (of size $128^2$) and deblurring patches of size $256^2$ is possible in real-time.
+Even though we did not optimize our implementation for speed, super-resolving small image patches of size $128^2$ and deblurring patches of size $256^2$ is possible in real-time (\cref{fig:benchmark}).
 
-A preliminary evaluation on intraoperative date did not show any significant improvement for both deblurring and super-resolution.
-A possible reason for this could be that the training data differs too much from the testing data in this case and that the video quality was too poor.
+A preliminary evaluation on intraoperative data did not show a significant improvement for both deblurring and super-resolution.
+This could be caused by poor video quality.
 
 \begin{figure}[htb]
 \centering
 \includegraphics[]{deblur_complete_paper}
-\caption{Measurements on Drive(Test).
-  Blur radius vs.\ metric.\\
+\caption{Performance metrics for deblurring on the Drive~\cite{Drive} dataset (testing).\\
 Segmentation on blurred images directly leads to an AUC of 0.96, 0.83 and 0.65 respectively.}
 \label{fig:deblurring-metrics}
 \end{figure}
@@ -574,7 +555,7 @@ Segmentation on blurred images directly leads to an AUC of 0.96, 0.83 and 0.65 r
     \caption{Deblurred with full model}
 \end{subfigure}
 
-\caption{Example deblurring. Image from Drive (test)~\cite{Drive}}
+\caption{Example for deblurring. Image from Drive (test)~\cite{Drive}}
 \label{fig:deblurring-example}
 \end{figure}
 
@@ -597,35 +578,22 @@ Measured on a Titan X.}
 \end{figure}
 
 \section{Summary}
-% \begin{enumerate}
-% \item We compare different loss functions and their suitability for medical image denoising.
-% \item We present models that are able to reconstruct images detoriated by both mentioned downsampling operators in real-time.
-% \item We evaluate the resulting algorithms on both diagnostic and intraoperative images and discuss their robustness against Blur.
-%   This is combined with a discussion of the effectiveness of our transfer learning approach.
-% \end{enumerate}
-
-The presented models work well for diagnostic images.
-They are efficient and result in both faithful and perceptual satisfying images.
-While the individual loss functions result in good reconstructions, our chosen combination is clearly superior by all used metrics.
-The adversarial loss leads to images that are more smooth but deviate from the data, sometimes introducing additional vessels or other artefacts.
+Our proposed models work well for diagnostic images.
+They are efficient and result in both faithful and perceptual convincing images.
+While the individual loss functions result in good reconstructions, our chosen ensemble is clearly superior by all used metrics.
 
 The algorithms satisfy all our constraints for intraoperative usage:
-% \begin{enumerate}
-% \item All processing should happen in real time.
-% \item It has to work with images of varying quality, level of zoom and different positions of surgical instruments.
-% \item The anatomical structure, the position of surgical instruments, and the color have to be conserved.
-% Both blood vessels and the border of the membrane should be at least as clearly visible as in the original images.
-% This implies that we have to preserve the image edges.
-% \end{enumerate}
 \begin{itemize}
 \item The algorithms work in real-time for small patch sizes without performance optimization.
   If a faster speed is desired our super-resolution network is also able to output $2\times$ resolved images.
 \item The deblurring network is robust to different levels of blur.
   It is able to improve the segmentation results on all tested blur intensities.
+  The super-resolution network is robust to blur due to the used data augmentations.
 \item All networks except the ones trained with adversarial loss retain the structure of blood vessels.
-  They can thus be used for medical purposes.
-  The chosen loss combination is able to restore gradient-information of the image with high detail.
+  Our evaluation showed that the proposed loss ensemble recovers vessels, image gradients and overall detail better than all single loss functions.
+  They retain the anatomical structure and other fine details.
 \end{itemize}
+We have thus shown that our proposed methods can be used successfully a pre-processor for other computer vision tasks or to provide a digital zoom.
 
 \FloatBarrier
 \printbibliography
