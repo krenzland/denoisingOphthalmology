@@ -255,7 +255,7 @@ The modified architecture can be seen in~\cref{fig:lapdeblur}.
 
 We use the PatchGan~\cite{PatchGAN} discriminator for adversarial learning.
 This is a fully convolutional network that penalizes on a basis of $70\times70$ patches.
-In contrast to~\cite{PachGAN} we use instance normalization instead of batch normalisation layers.
+In contrast to~\cite{PachGAN} we use instance normalization~\cite{InstanceNorm} instead of batch normalisation layers.
 \todo{Cite instance norm.}
 Its architecture can be seen in \cref{fig:patchd}.
 
@@ -607,12 +607,13 @@ The algorithms satisfy all our constraints for intraoperative usage:
 % This implies that we have to preserve the image edges.
 % \end{enumerate}
 \begin{itemize}
-\item The algorithms work in real-time for small patch sizes.
+\item The algorithms work in real-time for small patch sizes without performance optimization.
   If a faster speed is desired our super-resolution network is also able to output $2\times$ resolved images.
 \item The deblurring network is robust to different levels of blur.
   It is able to improve the segmentation results on all tested blur intensities.
 \item All networks except the ones trained with adversarial loss retain the structure of blood vessels.
   They can thus be used for medical purposes.
+  The chosen loss combination is able to restore gradient-information of the image with high detail.
 \end{itemize}
 
 \printbibliography
